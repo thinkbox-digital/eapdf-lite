@@ -202,30 +202,6 @@ class AttachmentProfilePolicyTests {
   }
 
   @Test
-  void nonIsolatedRealPstAttachmentBytesSurviveInsideEmbeddedEmail() throws Exception {
-    List<EmailRecord> records = PstReader.readPst(TestSupport.fixturePath("test.pst").toString(), "", List.of(), false);
-    Assertions.assertTrue(records.stream().flatMap(candidate -> candidate.associatedFiles.stream()).noneMatch(file -> file.filename.contains("\0")));
-    EmailRecord record = records.stream().filter(candidate -> candidate.associatedFiles.stream().anyMatch(file -> file.emailAttachment)).findFirst().orElseThrow();
-    byte[] pdf = PdfMailWriter.buildSingleMessagePdf(tempDir.resolve("pst_1s.pdf"), record, TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, 1, "s").pdfBytes;
-    try (PDDocument document = Loader.loadPDF(pdf)) {
-      Map<String, PDComplexFileSpecification> embedded = files(document);
-      Assertions.assertEquals(2, embedded.size());
-      AssociatedFile headers = record.associatedFiles.stream().filter(file -> file.sourceSetMember).findFirst().orElseThrow();
-      Assertions.assertArrayEquals(headers.data(), bytes(embedded.get(headers.filename)));
-      PDComplexFileSpecification source = embedded.values().stream().filter(file ->
-          "Source".equals(file.getCOSObject().getNameAsString(COSName.getPDFName("AFRelationship")))).findFirst().orElseThrow();
-      Assertions.assertEquals("Source", source.getCOSObject().getNameAsString(COSName.getPDFName("AFRelationship")));
-      Assertions.assertTrue(TestSupport.metadataXml(document).contains("<pdfmailmeta:Filename>message.eml</pdfmailmeta:Filename>"));
-      EmailRecord decoded = EmlReader.readRfc822Bytes(bytes(source), "embedded.eml", "embedded.eml", "", List.of(), false);
-      for (AssociatedFile original : record.associatedFiles) {
-        if (!original.emailAttachment) continue;
-        Assertions.assertTrue(decoded.associatedFiles.stream().anyMatch(file -> file.emailAttachment && Arrays.equals(original.bytes, file.bytes)),
-            "Native bytes must remain inside the source email: " + original.filename);
-      }
-    }
-  }
-
-  @Test
   void defaultPstProfilePreservesExportAndAttachments() throws Exception {
     EmailRecord record = record("Default PST profile");
     byte[] pdf = PdfMailWriter.buildSingleMessagePdf(tempDir.resolve("pst.pdf"), record, TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, 1).pdfBytes;
@@ -246,8 +222,6 @@ class AttachmentProfilePolicyTests {
       Assertions.assertEquals(1, record.attachmentCount);
     }
   }
-
-
 
   @Test
   void nonIsolatedPolicyAlsoAppliesToOriginalEmlSourcesWithoutChangingTheirBytes() throws Exception {

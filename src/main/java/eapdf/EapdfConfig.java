@@ -21,41 +21,12 @@ class EapdfConfig {
 
 
 
-  static class SearchIndexConfig {
-    boolean enabled = true;
-    boolean fullTextEnabled = true;
-  }
-
-
-
-  static class AccessibilityConfig {
-    boolean addPdfUaFeatures = false;
-    boolean markInfoMarked = true;
-    String language = "en";
-    String readingDirection = "L2R";
-    PageLabelsConfig pageLabels = new PageLabelsConfig();
-    ExperimentalConfig experimental = new ExperimentalConfig();
-  }
-
-  static class PageLabelsConfig {
-    boolean enabled = true;
-    boolean singleMessage = false;
-    boolean archiveAndCollection = true;
-    String frontMatterPrefix = "Index-";
-  }
-
-  static class ExperimentalConfig {
-    boolean altTextGeneratedImages = false;
-  }
-
   SigningConfig signing = new SigningConfig();
   int configVersion = 1;
   boolean validateOnCreation = true;
   String validationWarning = "";
   static final String DEFAULT_CREATOR = "Thinkbox.DIGITAL";
   String creator = DEFAULT_CREATOR;
-  SearchIndexConfig searchIndex = new SearchIndexConfig();
-  AccessibilityConfig accessibility = new AccessibilityConfig();
 
   String requireCreator() {
     if (creator == null || creator.isBlank()) {
@@ -95,9 +66,6 @@ class EapdfConfig {
       validateKeys(json.getAsJsonObject(), EapdfConfig.class, "");
       EapdfConfig loaded = normalize(new Gson().fromJson(json, EapdfConfig.class));
       if (loaded.configVersion != 1) throw new IllegalArgumentException("unsupported configVersion: " + loaded.configVersion + " (expected 1)");
-      if (loaded.accessibility.experimental.altTextGeneratedImages) {
-        System.err.println("warning: accessibility.experimental settings are unavailable and do not change the output");
-      }
       return loaded;
     } catch (Exception e) {
       throw new RuntimeException("failed to load config from " + path + ": " + e.getMessage(), e);
@@ -132,15 +100,6 @@ class EapdfConfig {
 
   static EapdfConfig normalize(EapdfConfig cfg) {
     if (cfg.signing == null) cfg.signing = new SigningConfig();
-    if (cfg.searchIndex == null) cfg.searchIndex = new SearchIndexConfig();
-    if (cfg.accessibility == null) cfg.accessibility = new AccessibilityConfig();
-    if (cfg.accessibility.pageLabels == null) cfg.accessibility.pageLabels = new PageLabelsConfig();
-    if (cfg.accessibility.experimental == null) cfg.accessibility.experimental = new ExperimentalConfig();
-    if (cfg.accessibility.language != null && cfg.accessibility.language.isBlank()) cfg.accessibility.language = null;
-    if (cfg.accessibility.readingDirection != null && cfg.accessibility.readingDirection.isBlank()) cfg.accessibility.readingDirection = null;
-    if (cfg.accessibility.pageLabels.frontMatterPrefix == null || cfg.accessibility.pageLabels.frontMatterPrefix.isBlank()) {
-      cfg.accessibility.pageLabels.frontMatterPrefix = "Index-";
-    }
     return cfg;
   }
 }

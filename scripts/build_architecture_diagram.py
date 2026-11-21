@@ -34,9 +34,9 @@ def build(path):
     pdfmetrics.registerFont(TTFont('Arch', str(ROOT / 'src/main/resources/assets/DejaVuSans.ttf')))
     pdfmetrics.registerFont(TTFont('ArchBold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
     pdf = canvas.Canvas(str(path), pagesize=(1200, 750), invariant=1, pageCompression=1)
-    pdf.setTitle('EA-PDF Software Architecture')
+    pdf.setTitle('EA-PDF Lite Software Architecture')
     pdf.setAuthor('Thinkbox.DIGITAL')
-    pdf.setSubject('Creator, standalone validation, and Full/Even More Lite readers; current product and dependency overview')
+    pdf.setSubject('Lite creator, standalone validator, and Even More Lite reader')
     pdf.setCreator('EA-PDF architecture diagram builder')
     pdf.setKeywords('EA-PDF, architecture, creator, validator, viewer, Even More Lite')
     blue = HexColor('#163f58'); ink = HexColor('#233b4a'); border = HexColor('#cbd9e2')
@@ -58,34 +58,34 @@ def build(path):
             cursor -= 12
         assert cursor >= y + 3, (heading, 'Text exceeds card height', cursor, y)
 
-    text(40, 707, 'EA-PDF SOFTWARE ARCHITECTURE', 24, True, blue)
+    text(40, 707, 'EA-PDF LITE SOFTWARE ARCHITECTURE', 24, True, blue)
     text(40, 683, 'Thinkbox.DIGITAL  |  Product and dependency overview  |  ' + date.today().strftime('%d %B %Y'), 11)
     width = (1120 - 32) / 3
     xs = [40, 40 + width + 16, 40 + 2 * (width + 16)]
-    card(xs[0], 418, width, 244, 'EA-PDF CREATOR', [
-        ('Java 21+  |  Desktop and command line', version),
-        ('Email to preservation PDF', 'EML, MSG, PST, MBOX and Gmail. PDF 2.0 / PDF/A-4f, email metadata, document parts and attachments.'),
-        ('Output choices', 'Single messages, combined archives or collections. Optional accessibility features, search indexes and signing.')])
+    card(xs[0], 418, width, 244, 'EA-PDF LITE CREATOR', [
+        ('Java 21+  |  Command line', version),
+        ('Email to preservation PDF', 'Local EML files and directories. PDF 2.0 / PDF/A-4f, email metadata, document parts and attachments.'),
+        ('Output choices', 'Single messages, combined archives or collections. All six EA-PDF output profiles.')])
     card(xs[1], 418, width, 244, 'STANDALONE VALIDATOR', [
-        ('Java 21+  |  Desktop and command line', version),
+        ('Java 21+  |  Command line', version),
         ('Checks', f'{rules} project rule definitions; PDF/A validation; selected ISO 32005 structure rules.'),
         ('Scope', 'Embedded PDFs, attachments and source consistency. Reports PASS, FAIL or INCOMPLETE. No server required.')])
-    card(xs[2], 418, width, 244, 'FULL / EVEN MORE LITE', [
+    card(xs[2], 418, width, 244, 'EVEN MORE LITE READER', [
         ('Chromium and Firefox  |  Local files', reader['version']),
-        ('Shared reading experience', 'PDF pages, message/folder navigation and embedded assets. Full adds search, filtering and CSV/XMP export.'),
-        ('Even More Lite', 'Messages, pages and embedded assets in three adjustable panes. No search, metadata exports or Portfolio view. 32 MiB / 2,048 pages.')])
+        ('Navigate', 'Three adjustable panes for messages and folders, PDF pages and embedded assets.'),
+        ('Document limits', '32 MiB and 2,048 pages per local PDF.')])
 
     card(xs[0], 122, width, 274, 'CREATOR LIBRARIES', [
         ('PDF creation and metadata', f"PDFBox / XMPBox {java['pdfbox']}; FontBox {java['fontbox']}. OpenHTMLtoPDF {java['openhtmltopdf-pdfbox']} with four maintained patches."),
-        ('Email and content', f"Jakarta Mail / Angus Mail, java-libpst, Outlook Message Parser, POI {java['poi']}, jsoup {java['jsoup']}, RTF-to-HTML and jutf7."),
-        ('Other integrations', f"Bouncy Castle {java['bcpkix-jdk18on']}; Google Gmail / OAuth clients; Gson {java['gson']}; metadata-extractor {java['metadata-extractor']}.")])
+        ('Email and content', f"Jakarta Mail / Angus Mail, jsoup {java['jsoup']}, jutf7 and metadata-extractor {java['metadata-extractor']}."),
+        ('Other integrations', f"Bouncy Castle {java['bcpkix-jdk18on']}; Gson {java['gson']}.")])
     card(xs[1], 122, width, 274, 'VALIDATION LIBRARIES', [
         ('veraPDF engines and project checks', f"Core / XMP {vera['core']}; parser {vera['parser']}; PDF model {vera['pdf-model']}; validation model {vera['validation-model']}. Local storage/resource patches remain."),
         ('PDF and email inspection', f"PDFBox {vera['pdfbox']}; FontBox {vera['fontbox']}; POI {vera['poi']}; Gson {vera['gson']}; Jakarta Mail / Angus Mail; project EA-PDF checks."),
         ('Optional development tool', 'Python CLI for regression tests and diagnostics. The web workbench and its deployment code are removed.')])
     card(xs[2], 122, width, 274, 'READER FOUNDATION', [
         ('PDF engine and shared hooks', f"PDF.js {reader['dependencies']['pdfjs-dist']}. Generic hooks expose document parts / DPM, associated files, metadata and collection membership."),
-        ('Application layer', f"TypeScript {reader['devDependencies']['typescript']}; browser extensions. Full and Even More Lite share maintained source; the smaller reader has a reproducible standalone export."),
+        ('Application layer', f"TypeScript {reader['devDependencies']['typescript']}; browser extensions. The standalone export shares maintained source with the Full reader."),
         ('Build tools only', f"Node {reader['engines']['node']}; npm {reader['engines']['npm']}; Playwright {reader['devDependencies']['playwright']}. No Java or Python needed by the extensions.")])
 
     pdf.setStrokeColor(blue); pdf.setFillColor(blue); pdf.setLineWidth(1.5)
@@ -97,15 +97,15 @@ def build(path):
         pdf.drawPath(arrow, fill=1, stroke=0)
 
     text(40, 91, 'High-level overview: transitive libraries and some helpers are omitted. Rule counts are project definitions, not a claim of complete specification coverage.', 9)
-    text(40, 73, 'Preserve original mailboxes separately. Validation has defined limits; PDF/UA machine checks do not replace human accessibility review.', 9)
-    text(40, 43, 'Source and maintenance notes: docs/ARCHITECTURE.md  |  github.com/thinkbox-digital/eapdf', 9, color=blue)
+    text(40, 73, 'Preserve original EML files separately. See the Java validator guide for report details and validation limits.', 9)
+    text(40, 43, 'Source and maintenance notes: docs/ARCHITECTURE.md  |  github.com/thinkbox-digital/eapdf-lite', 9, color=blue)
     pdf.showPage(); pdf.save()
 
 
 def main():
     version = (ROOT / 'VERSION').read_text().strip()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--creator-jar', type=Path, default=ROOT / 'dist' / f'emailtopdfa-{version}.jar')
+    parser.add_argument('--creator-jar', type=Path, default=ROOT / 'dist' / f'emailtopdfa-lite-{version}.jar')
     parser.add_argument('--validator-jar', type=Path, default=ROOT / 'dist' / f'eapdf-validator-{version}.jar')
     parser.add_argument('--output', type=Path, default=ROOT / 'docs/EA-PDF_Software_Architecture.pdf')
     args = parser.parse_args(); args.output.parent.mkdir(parents=True, exist_ok=True)

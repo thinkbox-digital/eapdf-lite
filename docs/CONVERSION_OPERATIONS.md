@@ -43,7 +43,7 @@ EA-PDF §9.8.3 permits raw Core Field representations when the source value cann
 
 ## Standards and human acceptance
 
-The full ISO/TS 32005:2023 copy is still needed for a complete clause audit. The publisher's public inclusion spreadsheet is explicitly informative, not a substitute for the normative text; its download was unavailable (HTTP 403) during that audit. Passing the bundled operational checks does not replace a complete clause audit. When Accessibility is enabled, the creator adds the PDF/UA-2 identifier and accessibility repairs. Machine validation does not establish meaningful image descriptions, correct reading order or usability with assistive technology.
+The full ISO/TS 32005:2023 copy is still needed for a complete clause audit. The publisher's public inclusion spreadsheet is explicitly informative, not a substitute for the normative text; its download was unavailable (HTTP 403) during that audit. Passing the bundled operational checks does not replace a complete clause audit. Lite Creator generates the tagged structure required by EA-PDF. Machine validation does not establish meaningful image descriptions, correct reading order or usability with assistive technology.
 
 Before a production release, retain signed results for meaningful image alternatives, assistive technology, complex-script shaping/reading order, viewer navigation/extraction, live Gmail authorization/resume and interactive GUI cancellation on target platforms. Those require human/account/platform access; passing automated tests alone does not certify them. Release notices now merge into both JARs, but actual distribution/relinking rights and proprietary branding authorization remain release decisions.
 
@@ -199,8 +199,7 @@ post-write creator validation, including in-memory collection children. The
 default is true. Skipped creation checks are recorded as `SKIPPED`; preservation
 comparison and standalone PDF/A/EA-PDF validation are `NOT_RUN`. This option
 does not disable atomic publication, output hashing, cancellation or resource
-safeguards. It does not establish conformance. Future regeneration configs must
-also enable `accessibility.addPdfUaFeatures`, per the user's preference.
+safeguards. Run the standalone validator to assess conformance.
 
 
 ## Creator GUI logs

@@ -53,22 +53,9 @@ class RecipientGroupPreservationTests {
   }
 
   @Test
-  void emptyGroupsDoNotInventMailboxesAndPstHeaderRecoveryExpandsSuppliedMembers() throws Exception {
+  void emptyGroupsDoNotInventMailboxes() {
     assertTrue(Common.internetAddressListLenient("undisclosed-recipients:;").isEmpty());
     assertFalse(Common.smtpMailbox(TO));
     assertTrue(Common.smtpMailbox("alice@example.org"));
-    var members = new java.util.ArrayList<MailAgent>();
-    PstReader.addHeaderAgents(members, TO,
-        () -> jakarta.mail.internet.InternetAddress.parseHeader(TO, false));
-    assertEquals(List.of("alice@example.org", "bob@example.org"), members.stream().map(agent -> agent.email).toList());
-    members.clear();
-    PstReader.addHeaderAgents(members, "undisclosed-recipients:;",
-        () -> jakarta.mail.internet.InternetAddress.parseHeader("undisclosed-recipients:;", false));
-    assertTrue(members.isEmpty());
-    PstReader.addHeaderAgents(members, TO, () -> { throw new jakarta.mail.internet.AddressException("recover header"); });
-    assertEquals(List.of("alice@example.org", "bob@example.org"), members.stream().map(agent -> agent.email).toList());
-    members.clear();
-    PstReader.addHeaderAgents(members, "undisclosed-recipients:;", () -> null);
-    assertTrue(members.isEmpty());
   }
 }

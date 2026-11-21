@@ -155,7 +155,6 @@ class Common {
     final java.util.concurrent.atomic.AtomicLong imagePixels = new java.util.concurrent.atomic.AtomicLong();
     final java.util.concurrent.atomic.AtomicLong renderedPages = new java.util.concurrent.atomic.AtomicLong();
     int workerLimit = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-    long largestSourceMessageBytes;
 
     JobReport() {
       ACTIVE_JOB.set(this);
@@ -272,10 +271,6 @@ class Common {
     if (options.containsKey("archive-output") && profile == null) throw fail("--archive-output requires --archive-profile");
   }
 
-  static void die(String s) {
-    throw fail(s);
-  }
-
   interface AtomicFileWriter {
     void write(Path temporary) throws Exception;
   }
@@ -336,7 +331,6 @@ class Common {
     OutputTransaction.write(destination, temporary -> {
       ProcessingLimits.checkCancelled();
       writer.write(temporary);
-      if (outermost) FullTextSearchIndex.add(temporary);
       boolean checked = EapdfConfig.get().validateOnCreation;
       if (checked) {
         if (outermost) ConversionProgress.stage("checking");
@@ -726,15 +720,6 @@ static String sourceDerivation(EmailRecord record) {
   if ("mbox".equals(record.sourceType)) {
     String description = "MBOX preprocessing: extracted an RFC 822 message and reversed mailbox quoting from "
         + "the MBOX source; the original mailbox container and envelope are not embedded.";
-    if (record.mboxProvenance != null) {
-      var provenance = record.mboxProvenance;
-      var entry = provenance.entry();
-      description += " MBOX inventory: container SHA-256=" + provenance.containerSha256() + "; bytes=" + provenance.containerSize()
-          + "; requested format=" + provenance.requestedFormat() + "; entry=" + entry.ordinal() + "/" + provenance.entryCount()
-          + "; envelope byte=" + entry.envelopeOffset() + "; raw message byte=" + entry.messageOffset() + "; raw size=" + entry.rawSize()
-          + "; raw SHA-256=" + entry.rawSha256() + "; exported size=" + entry.exportedSize() + "; exported SHA-256=" + entry.exportedSha256()
-          + "; padding bytes=" + entry.paddingSize() + "; framing=" + entry.framing() + "; quoting=" + entry.quoting() + ".";
-    }
     return description;
   }
   return "";
@@ -876,13 +861,6 @@ static String stripInvalidXml(String s) {
     return t.trim();
   }
 
-  static String readToString(InputStream in) throws IOException {
-    ByteArrayOutputStream b = new ByteArrayOutputStream();
-    byte[] buf = new byte[8192];
-    for (int n; (n=in.read(buf))!=-1;) b.write(buf,0,n);
-    return b.toString(StandardCharsets.UTF_8);
-  }
-
   static byte[] readAllBytes(InputStream in) throws IOException {
     return ProcessingLimits.read(in, "email attachment");
   }
@@ -919,18 +897,6 @@ static String stripInvalidXml(String s) {
     throw fail("missing --icc /path/to/sRGB.icc and no bundled ICC profile found");
   }
 
-  static String bundledLogoUri() {
-    Path bundled = bundledAssetPath("assets/thinkbox_logo.jpg", ".jpg");
-    return bundled == null ? "" : bundled.toUri().toString();
-  }
-
-  static String bundledFooterUri() {
-    Path optimized = bundledAssetPath("assets/thinkbox_footer_optimized.png", ".png");
-    if (optimized != null) return optimized.toUri().toString();
-    Path bundled = bundledAssetPath("assets/thinkbox_footer.png", ".png");
-    return bundled == null ? "" : bundled.toUri().toString();
-  }
-
   static Path resolveExistingPath(String... candidates) {
     if (candidates == null) return null;
     for (String candidate : candidates) {
@@ -942,12 +908,6 @@ static String stripInvalidXml(String s) {
       }
     }
     return null;
-  }
-
-  static String resolveCredentialsPath(String credentialsPath) {
-    if (credentialsPath != null && !credentialsPath.isBlank()) return credentialsPath;
-    Path resolved = resolveExistingPath("config/credentials.json", "credentials.json");
-    return resolved == null ? "config/credentials.json" : resolved.toString();
   }
 
   static String projectVersion() {
@@ -1128,14 +1088,6 @@ static String stripInvalidXml(String s) {
     return i >= 0 ? t.substring(0, i).trim() : t;
   }
 
-  static boolean isNonEmailOutlookItem(String itemClass) {
-    String value = stripInvalidXml(nz(itemClass)).trim().toLowerCase(Locale.ROOT);
-    for (String nonEmail : List.of("ipm.contact", "ipm.distlist", "ipm.appointment", "ipm.task", "ipm.stickynote", "ipm.activity")) {
-      if (value.equals(nonEmail) || value.startsWith(nonEmail + ".")) return true;
-    }
-    return false;
-  }
-
   static String detectMimeType(String filename, String declaredMime, byte[] bytes) {
     String m = nz(declaredMime).trim().toLowerCase(Locale.ROOT);
     if (m.equals("image/png") || m.equals("image/jpeg") || m.equals("image/gif") || m.equals("image/webp") || m.equals("image/bmp") || m.equals("image/svg+xml") || m.equals("message/rfc822") || m.equals("application/vnd.ms-outlook")) return m;
@@ -1205,22 +1157,6 @@ static String stripInvalidXml(String s) {
     } catch (IllegalArgumentException malformedEscape) {
       return key;
     }
-  }
-
-  static String defaultExtensionName(String mime, String stem) {
-    String m = nz(mime).toLowerCase(Locale.ROOT);
-    if (m.equals("image/png")) return stem + ".png";
-    if (m.equals("image/jpeg")) return stem + ".jpg";
-    if (m.equals("image/gif")) return stem + ".gif";
-    if (m.equals("image/webp")) return stem + ".webp";
-    if (m.equals("image/bmp")) return stem + ".bmp";
-    if (m.equals("image/svg+xml")) return stem + ".svg";
-    if (m.equals("application/pdf")) return stem + ".pdf";
-    if (m.equals("text/plain")) return stem + ".txt";
-    if (m.equals("text/html")) return stem + ".html";
-    if (m.equals("message/rfc822")) return stem + ".eml";
-    if (m.equals("application/vnd.ms-outlook")) return stem + ".msg";
-    return stem + ".bin";
   }
 
   static String extensionForMime(String mime, String filename) {
@@ -1319,14 +1255,6 @@ static String stripInvalidXml(String s) {
     SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT);
     f.setTimeZone(TimeZone.getTimeZone("UTC"));
     return f.format(new Date());
-  }
-
-  static String xml(String s) {
-    return stripInvalidXml(nz(s)).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");
-  }
-
-  static String xmlAttr(String s) {
-    return stripInvalidXml(nz(s)).replace("&","&amp;").replace("<","&lt;").replace("\"","&quot;");
   }
 
   static MailAgent agent(String name, String email) {

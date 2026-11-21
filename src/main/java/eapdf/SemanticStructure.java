@@ -19,7 +19,6 @@ import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdfwriter.ContentStreamWriter;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
@@ -140,84 +139,9 @@ final class SemanticStructure {
     headerFields(element.getDictionaryObject(COSName.K), marker);
   }
 
-  static void beginGroup(PDPageContentStream content, String role) throws IOException {
-    if (PdfMailWriter.pdfUaFeaturesEnabled()) content.beginMarkedContent(COSName.getPDFName(role));
-  }
-
-  static void endGroup(PDPageContentStream content) throws IOException {
-    if (PdfMailWriter.pdfUaFeaturesEnabled()) content.endMarkedContent();
-  }
-
   static COSDictionary importedTree(PDDocument target, PDDocument source, org.apache.pdfbox.multipdf.PDFCloneUtility cloner) throws IOException {
     COSDictionary tree = (COSDictionary)source.getDocumentCatalog().getCOSObject().getDictionaryObject(COSName.STRUCT_TREE_ROOT);
     return tree == null ? null : (COSDictionary)cloner.cloneForNewDocument(tree);
-  }
-
-  static void addDestinations(PDDocument document, COSDictionary tree) throws IOException {
-    Map<COSDictionary, COSDictionary> targets = new java.util.IdentityHashMap<>();
-    findTargets(dictionary(tree.getDictionaryObject(COSName.K)), null, targets);
-    var outline = document.getDocumentCatalog().getDocumentOutline();
-    if (outline != null) addOutlineDestinations(document, outline.getFirstChild(), targets);
-    for (PDPage page : document.getPages()) for (var annotation : page.getAnnotations()) {
-      COSDictionary action = dictionary(annotation.getCOSObject().getDictionaryObject(COSName.A));
-      if (action != null && "GoTo".equals(action.getNameAsString(COSName.S))) addActionDestination(document, action, targets);
-    }
-  }
-
-  private static void findTargets(COSDictionary element, COSDictionary inheritedPage, Map<COSDictionary, COSDictionary> targets) {
-    if (element == null) return;
-    COSDictionary page = dictionary(element.getDictionaryObject(COSName.PG));
-    if (page == null) page = inheritedPage;
-    COSBase content = element.getDictionaryObject(COSName.K);
-    List<COSBase> entries = new ArrayList<>();
-    if (content instanceof COSArray array) for (COSBase child : array) entries.add(child);
-    else if (content != null) entries.add(content);
-    boolean firstContent = true;
-    for (COSBase entry : entries) {
-      COSDictionary child = dictionary(entry);
-      if (child != null && child.containsKey(COSName.S)) findTargets(child, page, targets);
-      else if (firstContent) {
-        COSDictionary targetPage = child == null ? page : dictionary(child.getDictionaryObject(COSName.PG));
-        if (targetPage == null) targetPage = page;
-        if (targetPage != null) targets.putIfAbsent(targetPage, element);
-        firstContent = false;
-      }
-    }
-  }
-
-  private static COSArray structureDestination(PDDocument document, COSBase value, Map<COSDictionary, COSDictionary> targets) throws IOException {
-    if (!(value instanceof COSArray array) || array.size() == 0) return null;
-    COSDictionary page = dictionary(array.get(0));
-    COSDictionary target = targets.get(page);
-    if (target == null) return null;
-    COSArray destination = new COSArray();
-    destination.add(PdfDocumentParts.indirect(document, target));
-    for (int index = 1; index < array.size(); index++) destination.add(array.get(index));
-    return destination;
-  }
-
-  private static void addActionDestination(PDDocument document, COSDictionary action, Map<COSDictionary, COSDictionary> targets) throws IOException {
-    COSArray destination = structureDestination(document, action.getDictionaryObject(COSName.D), targets);
-    if (destination != null) action.setItem(COSName.getPDFName("SD"), destination);
-  }
-
-  private static void addOutlineDestinations(PDDocument document, org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem item,
-                                              Map<COSDictionary, COSDictionary> targets) throws IOException {
-    while (item != null) {
-      COSDictionary dictionary = item.getCOSObject();
-      COSBase legacy = dictionary.getDictionaryObject(COSName.DEST);
-      COSArray destination = structureDestination(document, legacy, targets);
-      if (destination != null) {
-        COSDictionary action = new COSDictionary();
-        action.setName(COSName.S, "GoTo");
-        action.setItem(COSName.D, legacy);
-        action.setItem(COSName.getPDFName("SD"), destination);
-        dictionary.removeItem(COSName.DEST);
-        dictionary.setItem(COSName.A, action);
-      }
-      addOutlineDestinations(document, item.getFirstChild(), targets);
-      item = item.getNextSibling();
-    }
   }
 
   static void attach(PDDocument document, COSDictionary tree, COSDictionary contentSet, COSDictionary original,
@@ -461,8 +385,7 @@ final class SemanticStructure {
   private static boolean pruneEmpty(COSDictionary element) {
     // A blank cell still occupies a column. Removing it makes an otherwise
     // regular table ragged and shifts the relationships read by assistive tools.
-    boolean keepCell = PdfMailWriter.pdfUaFeaturesEnabled()
-        && Set.of("TD", "TH", "Mail_FieldValue").contains(element.getNameAsString(COSName.S, ""));
+    boolean keepCell = Set.of("TD", "TH", "Mail_FieldValue").contains(element.getNameAsString(COSName.S, ""));
     COSBase content = element.getDictionaryObject(COSName.K);
     if (content instanceof COSArray array) {
       for (int index = array.size() - 1; index >= 0; index--) {
@@ -753,25 +676,14 @@ final class SemanticStructure {
         COSDictionary owner = dictionary(parentValue(parents(document, tree), key));
         if (owner != null) {
           bindAnnotationPage(document, owner, annotation.getCOSObject(), page);
-          if (PdfMailWriter.pdfUaFeaturesEnabled()
-              || annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment) {
-            if (annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment)
-              owner.setName(COSName.S, "Annot");
-            if (PdfMailWriter.pdfUaFeaturesEnabled() && owner.containsKey(COSName.ALT)) {
-              String alternate = Common.nz(owner.getString(COSName.ALT));
-              String contents = Common.nz(annotation.getContents());
-              // Retain an authored description, or use the renderer's visible
-              // link text when it supplied an empty Alt entry.
-              if (alternate.isBlank() && !contents.isBlank()) owner.setString(COSName.ALT, contents);
-              else if (!alternate.isBlank()) annotation.setContents(alternate);
-            }
-          }
+          if (annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment)
+            owner.setName(COSName.S, "Annot");
         }
         continue;
       }
       COSDictionary element = element(document, contentSet, children, page, annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink ? "Link" : "Annot");
       String description = Common.nz(annotation.getContents());
-      if (description.isBlank()) description = "Open linked email or finding-aid entry";
+      if (description.isBlank()) description = "Open linked email or file";
       element.setString(COSName.ALT, description);
       COSDictionary reference = new COSDictionary();
       reference.setName(COSName.TYPE, "OBJR");

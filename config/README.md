@@ -13,9 +13,8 @@ Current contents include:
 
 `EAPDF_CONFIG` selects the JSON configuration file. An explicitly selected missing or unreadable file is an error; only an absent default configuration falls back to built-in settings. The supported `configVersion` is `1`; unsupported versions or invalid value types stop loading with an explanation. Unknown keys produce warnings that include the full setting name.
 
-- `searchIndex.enabled` defaults to `true` for embedded search indexes. `searchIndex.fullTextEnabled` independently controls full-text generation for `1m`, `1mi`, `1c`, and `1ci`; it uses built-in PDFBox extraction. Extraction failures or exceeded limits produce a warning and retain ordinary PDF.js searching. See [format, limits and fallback](../docs/EMBEDDED_SEARCH_INDEX.md).
-- `accessibility.addPdfUaFeatures` enables semantic headings, paragraphs, tables, image descriptions, and annotation associations in message PDFs and collection/archival front matter. It remains partial accessibility support, not proven PDF/UA conformance.
-- The remaining `accessibility.experimental` setting are unavailable. Setting them to `true` produces a warning; they do not change output.
+- Lite Creator ignores the former `searchIndex` setting and emits an unknown-setting warning.
+Lite Creator generates the tagged structure required by EA-PDF. Remove the former `accessibility` object from older configuration files to avoid an unknown-setting warning.
 
 ## Processing And Fonts
 
@@ -64,7 +63,7 @@ The value becomes the first `dc:creator` item. `xmp:CreatorTool` and
 `pdf:Producer` continue to identify software. Validation checks the required
 metadata structure separately from provenance-backed attribution.
 
-Branding, finding-aid generation and PREMIS output have been removed. Old configuration keys for these features are ignored with an unknown-setting warning. Collections retain their required cover page. The GUI checkbox is **Accessibility (PDF/UA)**.
+Branding, finding-aid generation and PREMIS output have been removed. Old configuration keys for these features are ignored with an unknown-setting warning. Collections retain their required cover page.
 
 The regeneration workflow sets `validationWarning` after a failed or incomplete
 validation attempt. The “WARNING — Validation requires review” banner and its explanation are rendered visibly in message PDFs, with a notice

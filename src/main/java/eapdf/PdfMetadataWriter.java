@@ -29,10 +29,6 @@ final class PdfMetadataWriter {
   private final Assets assets;
   PdfMetadataWriter(EapdfConfig config, Assets assets) { this.CONFIG=config; this.assets=assets; }
 
-  boolean pdfUaFeaturesEnabled() {
-    return CONFIG.accessibility != null && CONFIG.accessibility.addPdfUaFeatures;
-  }
-
   String chooseEaPdfConformance(EmailRecord record) { return chooseEaPdfConformance(record, null); }
   String chooseEaPdfConformance(EmailRecord record, String override) {
     return !Common.nz(override).isBlank() ? override : record != null && !record.embedSourceMessage ? "si" : "s";
@@ -169,10 +165,6 @@ final class PdfMetadataWriter {
       ArrayProperty problems = array(conversion, "problems", Cardinality.Seq);
       for (EmailRecord record : records) for (String problem : record.sourceProblems)
         item(problems, record.mailGuid + " | " + record.subject + " | " + problem);
-    }
-    if (pdfUaFeaturesEnabled()) {
-      XMPSchema ua = metadata.createAndAddDefaultSchema("pdfuaid", "http://www.aiim.org/pdfua/ns/id/");
-      text(ua, "part", "2"); text(ua, "rev", "2024");
     }
     XMPSchema declarations = metadata.createAndAddDefaultSchema("pdfd", "http://pdfa.org/declarations/");
     AbstractStructuredType declaration = resource(array(declarations, "declarations", Cardinality.Bag));

@@ -19,14 +19,16 @@ class PdfWriterArchiveTests {
 
   @Test
   void writeEaPdfArchiveProducesValidOutlineDestinations() throws Exception {
-    Path mboxPath = TestSupport.firstInputWithExtension(".mbox");
-    List<EmailRecord> records = MboxReader.readMbox(
-        mboxPath.toString(),
-        "",
-        List.of(),
-        false);
+    Path sample = TestSupport.fixturePath("sample.eml");
+    Path first = Files.createDirectory(tempDir.resolve("first")).resolve("message.eml");
+    Path second = Files.createDirectory(tempDir.resolve("second")).resolve("message.eml");
+    Files.copy(sample, first);
+    Files.writeString(second, Files.readString(sample) + "\r\nSecond archived message.\r\n");
+    List<EmailRecord> records = List.of(
+        EmlReader.readEml(first.toString(), "", List.of(), false),
+        EmlReader.readEml(second.toString(), "", List.of(), false));
 
-    // PST readers commonly provide the same source filename for every email.
+    // Messages from different folders can have the same source filename.
     for (EmailRecord record : records) {
       record.sourceFilename = "message.eml";
       for (AssociatedFile file : record.associatedFiles)

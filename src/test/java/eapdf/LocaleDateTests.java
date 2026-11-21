@@ -17,10 +17,7 @@ class LocaleDateTests {
     Locale previous = Locale.getDefault();
     Locale format = Locale.getDefault(Locale.Category.FORMAT);
     TimeZone zone = TimeZone.getDefault();
-    var config = EapdfConfig.get();
-    boolean accessibility = config.accessibility.addPdfUaFeatures;
     try {
-      config.accessibility.addPdfUaFeatures = true;
       TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
       for (Locale locale : new Locale[]{Locale.US, Locale.forLanguageTag("th-TH")}) {
         Locale.setDefault(locale);
@@ -43,7 +40,6 @@ class LocaleDateTests {
       Locale.setDefault(previous);
       Locale.setDefault(Locale.Category.FORMAT, format);
       TimeZone.setDefault(zone);
-      config.accessibility.addPdfUaFeatures = accessibility;
     }
   }
 }

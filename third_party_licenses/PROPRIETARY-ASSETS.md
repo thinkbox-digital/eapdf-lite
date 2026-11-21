@@ -1,9 +1,8 @@
 # Proprietary Asset Notice
 
-The branding files under [`../assets/`](../assets/) appear to be proprietary
-ThinkBox assets rather than open-source artwork.
+Earlier EA-PDF outputs may contain proprietary ThinkBox branding.
 
-Files currently in scope:
+The source images were:
 
 - `thinkbox_footer.png`
 - `thinkbox_footer_optimized.png`

@@ -41,7 +41,11 @@ public final class JavaValidation {
   private static boolean initialised;
 
   public static void main(String[] args) throws Exception {
-    if (args.length != 2) throw new IllegalArgumentException("Validation worker requires an input and report path");
+    if (args.length != 2) {
+      System.err.println("Usage: java -jar eapdf-validator-<version>.jar <input.pdf> <report.json>");
+      System.exit(1);
+      return;
+    }
     Path input = Path.of(args[0]), output = Path.of(args[1]);
     if (!Boolean.getBoolean("eapdf.validator.worker")) {
       System.exit(ValidationWorker.run(input, output));

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "EA-PDF viewer beta",
+  "name": "EA-PDF Even More Lite",
   "description": "View local EA-PDF messages, collections and embedded files. Conformance is not evaluated.",
   "action": {
-    "default_title": "Open EA-PDF viewer",
+    "default_title": "Open EA-PDF Even More Lite",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -12,16 +12,9 @@
     }
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    "extension_pages": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
   },
-  "permissions": [
-    "contextMenus",
-    "activeTab"
-  ],
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "permissions": [],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",

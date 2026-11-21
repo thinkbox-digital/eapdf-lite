@@ -117,7 +117,6 @@ class EmailRecord {
   int textDataLength, htmlDataLength, rtfDataLength;
   long stagedMetadataSize;
   boolean payloadStaged;
-  MboxReadInventory.Provenance mboxProvenance;
   byte[] sourceBytes;
   String sourceFilename;
   String sourceMime;

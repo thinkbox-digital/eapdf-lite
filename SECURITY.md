@@ -1,6 +1,6 @@
 # Report a security problem
 
-Use GitHub's private [Report a vulnerability](https://github.com/thinkbox-digital/eapdf/security/advisories/new)
+Use GitHub's private [Report a vulnerability](https://github.com/thinkbox-digital/eapdf-lite/security/advisories/new)
 form. If it is unavailable, arrange a private channel with the repository owner.
 
 Include the affected version, steps to reproduce and a small, non-sensitive sample

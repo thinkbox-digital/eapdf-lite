@@ -173,27 +173,6 @@ class EmailContentRegressionTests {
   }
 
   @Test
-  void rtfOnlyPstBodiesAreConvertedAndMalformedRtfIsReported() {
-    EmailRecord record = new EmailRecord();
-    record.subject = "RTF email";
-    PstReader.populatePstBody(record, "", "", "{\\rtf1\\ansi Hello \\b rich text\\b0\\par Second paragraph}");
-    Assertions.assertTrue(record.textBody.contains("Hello"));
-    Assertions.assertTrue(record.textBody.contains("rich text"));
-    Assertions.assertTrue(record.textBody.contains("Second paragraph"));
-    Assertions.assertTrue(record.htmlBody.contains("rich text"));
-    Assertions.assertEquals("text/rtf; charset=UTF-8", record.bodyMime);
-    Common.UserFacingException error = Assertions.assertThrows(Common.UserFacingException.class,
-        () -> PstReader.populatePstBody(record, "", "", "Not valid RTF"));
-    Assertions.assertTrue(error.getMessage().contains("RTF email"));
-    PstReader.populatePstBody(record, "Original plain text", "", "Not valid RTF");
-    Assertions.assertEquals("Original plain text", record.textBody);
-    Assertions.assertEquals("text/plain; charset=UTF-8", record.bodyMime);
-    PstReader.populatePstBody(record, "", "<p>Original HTML</p>", "Not valid RTF");
-    Assertions.assertEquals("<p>Original HTML</p>", record.htmlBody);
-    Assertions.assertEquals("text/html; charset=UTF-8", record.bodyMime);
-  }
-
-  @Test
   void collectionCoreSchemaAndPerMessageValuesAreCorrectForBothProfiles() throws Exception {
     Map<String, String> required = Map.of("To", "S", "From", "S", "Sent", "D", "Subject", "S", "Message-ID", "S", "Cc", "S", "Bcc", "S", "Size", "Size", "Attachments", "N");
     for (String profile : List.of("c", "ci")) {

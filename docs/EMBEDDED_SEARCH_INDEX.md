@@ -1,5 +1,9 @@
 # Embedded search indexes
 
+This guide describes the Full edition. Lite Creator omits embedded metadata and
+full-text indexing. The benchmark and validation tools referenced here belong to
+the [Full checkout](../../eapdf-main/docs/EMBEDDED_SEARCH_INDEX.md).
+
 The Java creator adds an optional metadata search index to new `1c` and `1ci`
 collections. The offline browser viewer uses it to populate the existing message
 list without opening the individual message PDFs. Version 2 is the compact metadata format; the viewer also accepts version 1. The separate version 3 full-text property, described below, extends the

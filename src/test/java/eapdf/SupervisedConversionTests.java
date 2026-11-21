@@ -15,7 +15,7 @@ class SupervisedConversionTests {
 
   public static class InheritedLimitProbe {
     public static void main(String[] arguments) throws Exception {
-      var command = ConversionSupervisor.nativeLimits(List.of("/bin/true"), new PstJobBudget());
+      var command = ConversionSupervisor.nativeLimits(List.of("/bin/true"), new InputJobBudget());
       System.exit(new ProcessBuilder(command).inheritIO().start().waitFor());
     }
   }

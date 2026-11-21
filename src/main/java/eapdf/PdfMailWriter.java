@@ -15,16 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.time.*;
-import java.time.format.DateTimeFormatter;
-import com.openhtmltopdf.extend.FSStream;
-import com.openhtmltopdf.extend.FSStreamFactory;
-import com.openhtmltopdf.extend.FSUriResolver;
 import org.jsoup.*;
 import org.jsoup.nodes.*;
 import org.jsoup.parser.*;
-import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
-import com.openhtmltopdf.outputdevice.helper.ExternalResourceControlPriority;
 import org.apache.pdfbox.cos.*;
 import org.apache.pdfbox.multipdf.PDFCloneUtility;
 import org.apache.pdfbox.pdmodel.*;
@@ -34,19 +27,13 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
-import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDBorderStyleDictionary;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.*;
 import org.apache.pdfbox.pdmodel.interactive.viewerpreferences.PDViewerPreferences;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 class PdfMailWriter {
 static final EapdfConfig CONFIG = EapdfConfig.get();
@@ -60,13 +47,11 @@ static final PdfMetadataWriter METADATA = new PdfMetadataWriter(CONFIG, new PdfM
     return buildArchiveEmbeddedFilePlans(records).stream().map(p -> new PdfMetadataWriter.Asset(p.filename,p.file.size(),p.mime,p.checksumMd5,p.relationship,p.file.sourceSetMember)).toList();
   }
 });
-static final MailHtmlRenderer HTML = new MailHtmlRenderer(PdfMailWriter::pdfUaFeaturesEnabled, PdfMailWriter::chooseEaPdfConformance, PdfMailWriter::renderAssociatedFiles);
+static final MailHtmlRenderer HTML = new MailHtmlRenderer(PdfMailWriter::chooseEaPdfConformance, PdfMailWriter::renderAssociatedFiles);
 static final String EMBEDDED_LINK_PREFIX = PdfAttachmentSupport.EMBEDDED_LINK_PREFIX;
 static final String EMBEDDED_BADGE_LINK_PREFIX = PdfAttachmentSupport.EMBEDDED_BADGE_LINK_PREFIX;
 static final Set<String> PDF17_STRUCTURE_ROLES = Set.of("Art", "BlockQuote", "TOC", "TOCI", "Index", "Private", "Quote", "Note", "Reference", "BibEntry", "Code");
 static final ConcurrentMap<String, String> FAILED_REMOTE_ASSET_URLS = MailRenderPolicy.FAILED_REMOTE_ASSET_URLS;
-static final FSUriResolver REMOTE_ASSET_URI_RESOLVER = MailRenderPolicy.REMOTE_ASSET_URI_RESOLVER;
-static final FSStreamFactory REMOTE_ASSET_STREAM_FACTORY = MailRenderPolicy.REMOTE_ASSET_STREAM_FACTORY;
 static final InheritableThreadLocal<EmailRecord> ACTIVE_RENDER_RECORD = MailRenderPolicy.ACTIVE_RENDER_RECORD;
 static final ThreadLocal<Set<String>> RENDERED_IMAGES = MailRenderPolicy.RENDERED_IMAGES;
 static final ThreadLocal<Map<String, String>> ORIENTED_IMAGE_URIS = MailRenderPolicy.ORIENTED_IMAGE_URIS;
@@ -79,22 +64,6 @@ static {
 
 static boolean isAllowedRenderResource(String uri) {
   return MailRenderPolicy.isAllowedRenderResource(uri);
-}
-
-static byte[] decodeRenderImageUri(String uri) {
-  return MailRenderPolicy.decodeRenderImageUri(uri);
-}
-
-static String orientRenderImage(String uri) {
-  return MailRenderPolicy.orientRenderImage(uri);
-}
-
-static void checkRenderImage(byte[] bytes) {
-  MailRenderPolicy.checkRenderImage(bytes);
-}
-
-static FSStream trustedRenderAsset(String uri) {
-  return MailRenderPolicy.trustedRenderAsset(uri);
 }
 
 
@@ -116,54 +85,6 @@ static class SingleMessageBuildResult {
     this.pdfBytes = pdfBytes;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-static class PageLinkTarget {
-  final int sourcePageNumber;
-  final PDRectangle rect;
-  int targetPageNumber;
-
-  PageLinkTarget(int sourcePageNumber, PDRectangle rect) {
-    this.sourcePageNumber = sourcePageNumber;
-    this.rect = rect;
-  }
-}
-
-static class CollectionRunSummary {
-  final String harvestedEmails;
-  final String generatedAt;
-  final int folderCount;
-  final int messageCount;
-
-  CollectionRunSummary(String harvestedEmails, String generatedAt, int folderCount, int messageCount) {
-    this.harvestedEmails = harvestedEmails;
-    this.generatedAt = generatedAt;
-    this.folderCount = folderCount;
-    this.messageCount = messageCount;
-  }
-
-  String countsText() {
-    return String.format(java.util.Locale.US, "%,d %s across %,d %s", messageCount,
-        messageCount == 1 ? "message" : "messages", folderCount, folderCount == 1 ? "folder" : "folders");
-  }
-}
-
-
-
-
-
-
 
 static boolean includeAssociatedFile(EmailRecord record, AssociatedFile file) {
   return file.embedInPdf && record.embedSourceMessage && ("Source".equals(Common.nz(file.afRelationship))
@@ -282,22 +203,6 @@ static String nativeAttachmentToken(EmailRecord record, AssociatedFile file) {
       + ":" + attachmentLaunchToken(file);
 }
 
-static String nativeAttachmentHtml(EmailRecord record, AssociatedFile file) {
-  return HTML.nativeAttachmentHtml(record, file);
-}
-
-static String attachmentDisplayHtml(AssociatedFile af) {
-  return HTML.attachmentDisplayHtml(af);
-}
-
-static String attachmentTextWithBadgeHtml(AssociatedFile af) {
-  return HTML.attachmentTextWithBadgeHtml(af);
-}
-
-static String pdfaComplianceLabel() {
-  return "PDF/A-4f";
-}
-
 static byte[] renderHtmlPdf(String html, String baseUri, String fontPath, EmailRecord r, boolean debug) throws Exception {
   return HTML.renderHtmlPdf(html, baseUri, fontPath, r, debug);
 }
@@ -314,22 +219,6 @@ static byte[] renderXhtmlPdf(String xhtml, String baseUri, String fontPath) thro
 
 static byte[] renderXhtmlPdf(String xhtml, String baseUri, String fontPath, boolean fitWideContent) throws Exception {
   return HTML.renderXhtmlPdf(xhtml, baseUri, fontPath, fitWideContent);
-}
-
-static String buildPlainTextFallbackXhtml(String html) throws Exception {
-  return HTML.buildPlainTextFallbackXhtml(html);
-}
-
-static String messagePageStyle(EmailRecord record) throws Exception {
-  return HTML.messagePageStyle(record);
-}
-
-static int detectPrimaryContentWidthPx(String emailHtml) {
-  return HTML.detectPrimaryContentWidthPx(emailHtml);
-}
-
-static Integer extractElementWidthPx(Element el) {
-  return HTML.extractElementWidthPx(el);
 }
 
 static String buildRenderHtml(EmailRecord r, boolean debug, Path assetDir) throws Exception {
@@ -350,31 +239,8 @@ static String canonicalizeEmailHtml(String html, EmailRecord r, boolean debug) {
 
 
 
-static MailHtmlRenderer.BodyColors legacyBodyColorStyles(Element body) {
-  return HTML.legacyBodyColorStyles(body);
-}
-
-static void trimTrailingEmptyContent(Element root) {
-  HTML.trimTrailingEmptyContent(root);
-}
-
 static void linkifyBodyText(Element root) {
   HTML.linkifyBodyText(root);
-}
-
-static String normalizeRemoteAssetUrl(String raw) {
-  return MailRenderPolicy.normalizeRemoteAssetUrl(raw);
-}
-
-static String remoteAssetKey(String raw) {
-  return MailRenderPolicy.remoteAssetKey(raw);
-}
-
-static byte[] readAllBytes(Reader reader) throws IOException {
-  StringBuilder out = new StringBuilder();
-  char[] buf = new char[4096];
-  for (int n; (n = reader.read(buf)) != -1;) out.append(buf, 0, n);
-  return out.toString().getBytes(StandardCharsets.UTF_8);
 }
 
 // This affects rendered links only. The original source and its headers/body stay intact.
@@ -390,22 +256,6 @@ static String describeRemoteAssetResponse(String key, byte[] bytes) {
   return MailRenderPolicy.describeRemoteAssetResponse(key, bytes);
 }
 
-static boolean looksLikeHtmlResponse(byte[] bytes) {
-  return MailRenderPolicy.looksLikeHtmlResponse(bytes);
-}
-
-static boolean isLikelyRemoteImageUrl(String key) {
-  return MailRenderPolicy.isLikelyRemoteImageUrl(key);
-}
-
-static boolean looksLikeSvg(byte[] bytes) {
-  return MailRenderPolicy.looksLikeSvg(bytes);
-}
-
-static boolean looksLikeSupportedImage(byte[] bytes) {
-  return MailRenderPolicy.looksLikeSupportedImage(bytes);
-}
-
 static boolean shouldBlacklistRemoteAssetFailure(Throwable error) {
   return MailRenderPolicy.shouldBlacklistRemoteAssetFailure(error);
 }
@@ -416,18 +266,6 @@ static String describeRemoteAssetFailure(Throwable error) {
 
 static void configureRendererLogging() {
   MailRenderPolicy.configureRendererLogging();
-}
-
-static void blacklistRemoteAsset(String key, String reason) {
-  MailRenderPolicy.blacklistRemoteAsset(key, reason);
-}
-
-static void recordBlacklistedRemoteAssetEncounter(String key) {
-  MailRenderPolicy.recordBlacklistedRemoteAssetEncounter(key);
-}
-
-static String preferRemoteAssetReason(String existing, String replacement) {
-  return MailRenderPolicy.preferRemoteAssetReason(existing, replacement);
 }
 
 static void writeEaPdfA3(Path out, EmailRecord r, String fontPath, String iccPath, boolean debug, Path debugDir, int idx) throws Exception {
@@ -491,7 +329,6 @@ private static SingleMessageBuildResult buildSingleMessagePdf(Path logicalOut, E
       drawPageContext(doc, fontPath);
       setDocumentInfo(doc, r);
       configureCatalog(doc, r, profileOverride);
-      applyPageLabels(doc, 0, true);
       addOutlines(doc, r);
       addDPartStructure(doc, r);
 
@@ -575,14 +412,9 @@ static int renderParallelism(int workItems) {
   if (workItems <= 1) return 1;
   int cpu = Math.max(1, Runtime.getRuntime().availableProcessors());
   Common.JobReport report = Common.ACTIVE_JOB.get();
-  long perWorker = report != null && report.largestSourceMessageBytes > 0
-      ? Math.max(128L * 1024 * 1024, report.largestSourceMessageBytes * 16)
-      : ProcessingLimits.messageBytes() * 16;
+  long perWorker = ProcessingLimits.messageBytes() * 16;
   int memoryWorkers = (int)Math.max(1, Math.min(Integer.MAX_VALUE, Runtime.getRuntime().maxMemory() / perWorker));
-  int workers = Math.max(1, Math.min(memoryWorkers, Math.min(workItems, Math.min(cpu, report == null ? 4 : report.workerLimit))));
-  if (report != null && report.largestSourceMessageBytes > 0)
-    System.out.println("Gmail archive rendering workers: " + workers);
-  return workers;
+  return Math.max(1, Math.min(memoryWorkers, Math.min(workItems, Math.min(cpu, report == null ? 4 : report.workerLimit))));
 }
 
 interface RenderedPartConsumer {
@@ -677,7 +509,6 @@ private static void saveArchiveDocument(Path temporary, Path out, List<EmailReco
       ConversionProgress.stage("assembling");
       setDocumentInfo(archive, records.get(0));
       configureArchiveCatalog(archive, archiveProfile);
-      applyPageLabels(archive, 0, false);
       ConversionProgress.begin("bookmarks", segments.size(), "emails");
       addArchiveOutlines(archive, segments, 0);
       ConversionProgress.begin("document_parts", segments.size(), "emails");
@@ -686,7 +517,7 @@ private static void saveArchiveDocument(Path temporary, Path out, List<EmailReco
       ConversionProgress.stage("embedding");
       EmbeddedFileBindings embeddedFiles = embedAssociatedFiles(archive, records, debug);
       PdfAttachmentSupport.rewriteAttachmentLaunchLinks(archive, embeddedFiles.filesByToken);
-      ConversionProgress.begin("page_information", archive.getNumberOfPages() < 2 || !CONFIG.accessibility.pageLabels.enabled ? 0 : archive.getNumberOfPages(), "pages");
+      ConversionProgress.begin("page_information", archive.getNumberOfPages() < 2 ? 0 : archive.getNumberOfPages(), "pages");
       drawPageContext(archive, fontPath);
       ConversionProgress.begin("tagging", segments.size(), "emails");
       addArchiveLogicalStructure(archive, segments, 0);
@@ -756,12 +587,11 @@ static void writeEaPdfCollection(Path out, List<EmailRecord> records, String fon
     clearImageInterpolation(archive);
     setDocumentInfo(archive, records.get(0));
     configureArchiveCatalog(archive, collectionProfile);
-    applyPageLabels(archive, archive.getNumberOfPages(), false);
     PdfCollectionSupport.addTopLevelCollectionDictionary(archive, folders);
     addOutlines(archive, PdfCollectionSupport.buildCollectionFrontRecord(records, collectionProfile, members));
     PdfCollectionSupport.addCollectionDPartStructure(archive, records, collectionProfile);
     setPdfA3Metadata(archive, iccPath, records, collectionProfile);
-    PdfCollectionSupport.embedCollectionFiles(archive, records, members, debug, true);
+    PdfCollectionSupport.embedCollectionFiles(archive, records, members, debug);
     // Embedded streams now own their copied bytes. Release child working PDFs before saving the collection.
     memberStore.close();
     PdfCollectionSupport.addCollectionLogicalStructure(archive);
@@ -786,26 +616,8 @@ static String ROOT_URI() {
   return Paths.get(".").toAbsolutePath().normalize().toUri().toString();
 }
 
-static void configureLinkAnnotation(PDAnnotationLink annotation, PDRectangle rect) {
-  PdfAttachmentSupport.configureLinkAnnotation(annotation, rect);
-}
-
 static PDType0Font loadUiFont(PDDocument doc, String fontPath) throws Exception {
   return FontSupport.loadUiFont(doc, fontPath);
-}
-
-static CollectionRunSummary buildCollectionRunSummary(List<EmailRecord> records, List<FolderSection> sections) {
-  LinkedHashSet<String> emails = new LinkedHashSet<>();
-  for (EmailRecord record : records) {
-    if (record == null || record.archiveEmails == null) continue;
-    for (String email : record.archiveEmails) {
-      String value = Common.nz(email).trim();
-      if (!value.isBlank()) emails.add(value);
-    }
-  }
-  String harvested = emails.isEmpty() ? "Not recorded" : String.join(", ", emails);
-  String generatedAt = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z"));
-  return new CollectionRunSummary(harvested, generatedAt, sections.size(), records.size());
 }
 
 static void drawInlineImageFallback(PDDocument doc, EmailRecord r, boolean debug) throws Exception {
@@ -825,12 +637,8 @@ static void drawInlineImageFallback(PDDocument doc, EmailRecord r, boolean debug
   if (debug) Common.dbg(r, "inline image fallback skipped: no source layout position can be established for " + Common.nz(imageFile.filename));
 }
 
-static boolean pdfUaFeaturesEnabled() {
-  return METADATA.pdfUaFeaturesEnabled();
-}
-
 static void drawPageContext(PDDocument document, String fontPath) throws Exception {
-  if (document.getNumberOfPages() < 2 || !CONFIG.accessibility.pageLabels.enabled) return;
+  if (document.getNumberOfPages() < 2) return;
   PDType0Font font = loadUiFont(document, fontPath);
   int pageCount = document.getNumberOfPages();
   int index = 0;
@@ -865,10 +673,6 @@ static boolean documentHasImageXObjects(PDDocument doc) {
 }
 
 
-
-static String buildMessageCollectionRenderHtml(List<CollectionMember> members, String collectionProfile, String folderName) {
-  return PdfCollectionSupport.buildMessageCollectionRenderHtml(members, collectionProfile, folderName);
-}
 
 static boolean pageHasImageXObjects(COSDictionary page) {
   COSDictionary resources = (COSDictionary)page.getDictionaryObject(COSName.RESOURCES);
@@ -945,7 +749,6 @@ static void configureCatalog(PDDocument doc, EmailRecord r, String profileOverri
     cat.setViewerPreferences(vp);
   }
   vp.setDisplayDocTitle(true);
-  applyCatalogAccessibility(cat, vp);
   vp.getCOSObject().setName(COSName.getPDFName("NonFullScreenPageMode"), nfsm);
 }
 
@@ -962,65 +765,7 @@ static void configureArchiveCatalog(PDDocument doc, String conformance) {
     cat.setViewerPreferences(vp);
   }
   vp.setDisplayDocTitle(true);
-  applyCatalogAccessibility(cat, vp);
   vp.getCOSObject().setName(COSName.getPDFName("NonFullScreenPageMode"), nfsm);
-}
-
-static void applyCatalogAccessibility(PDDocumentCatalog cat, PDViewerPreferences vp) {
-  EapdfConfig.AccessibilityConfig accessibility = CONFIG.accessibility;
-  if (accessibility == null || !accessibility.addPdfUaFeatures) return;
-  if (accessibility.markInfoMarked) {
-    COSDictionary markInfo = (COSDictionary)cat.getCOSObject().getDictionaryObject(COSName.MARK_INFO);
-    if (markInfo == null) {
-      markInfo = new COSDictionary();
-      cat.getCOSObject().setItem(COSName.MARK_INFO, markInfo);
-    }
-    markInfo.setBoolean(COSName.getPDFName("Marked"), true);
-  }
-  if (accessibility.language != null && !accessibility.language.isBlank()) {
-    cat.setLanguage(accessibility.language);
-  }
-  String readingDirection = Common.nz(accessibility.readingDirection);
-  if ("L2R".equalsIgnoreCase(readingDirection)) {
-    vp.setReadingDirection(PDViewerPreferences.READING_DIRECTION.L2R);
-  } else if ("R2L".equalsIgnoreCase(readingDirection)) {
-    vp.setReadingDirection(PDViewerPreferences.READING_DIRECTION.R2L);
-  }
-}
-
-static void applyPageLabels(PDDocument doc, int frontMatterPages, boolean singleMessage) {
-  if (!pdfUaFeaturesEnabled()) return;
-  EapdfConfig.PageLabelsConfig pageLabels = CONFIG.accessibility.pageLabels;
-  if (!pageLabels.enabled) return;
-  if (singleMessage && !pageLabels.singleMessage) return;
-  if (!singleMessage && !pageLabels.archiveAndCollection) return;
-
-  COSDictionary labels = new COSDictionary();
-  COSArray nums = new COSArray();
-  if (!singleMessage && frontMatterPages > 0) {
-    COSDictionary front = new COSDictionary();
-    front.setString(COSName.P, pageLabels.frontMatterPrefix);
-    front.setName(COSName.S, "D");
-    front.setInt(COSName.ST, 1);
-    nums.add(COSInteger.ZERO);
-    nums.add(front);
-
-    if (frontMatterPages < doc.getNumberOfPages()) {
-      COSDictionary rest = new COSDictionary();
-      rest.setName(COSName.S, "D");
-      rest.setInt(COSName.ST, 1);
-      nums.add(COSInteger.get(frontMatterPages));
-      nums.add(rest);
-    }
-  } else {
-    COSDictionary all = new COSDictionary();
-    all.setName(COSName.S, "D");
-    all.setInt(COSName.ST, 1);
-    nums.add(COSInteger.ZERO);
-    nums.add(all);
-  }
-  labels.setItem(COSName.NUMS, nums);
-  doc.getDocumentCatalog().getCOSObject().setItem(COSName.PAGE_LABELS, labels);
 }
 
 static void addTopLevelCollectionDictionary(PDDocument doc, List<CollectionFolder> folders) throws IOException {
@@ -1092,16 +837,8 @@ static String chooseArchiveNonFullScreenPageMode(String conformance, String page
   return ("m".equals(conformance) || "mi".equals(conformance)) ? "UseOutlines" : pageMode;
 }
 
-static EmailRecord buildCollectionFrontRecord(List<EmailRecord> records, String collectionProfile, List<CollectionMember> members) {
-  return PdfCollectionSupport.buildCollectionFrontRecord(records, collectionProfile, members);
-}
-
 static void addCollectionDPartStructure(PDDocument doc, List<EmailRecord> records, String collectionProfile) throws Exception {
   PdfCollectionSupport.addCollectionDPartStructure(doc, records, collectionProfile);
-}
-
-static void addCollectionLogicalStructure(PDDocument doc) throws IOException {
-  PdfCollectionSupport.addCollectionLogicalStructure(doc);
 }
 
 static void setCompressedMetadata(PDDocument doc, String xmp) throws IOException {
@@ -1164,22 +901,6 @@ static String buildXmpMetadata(List<EmailRecord> records, String archiveProfile)
   return METADATA.buildXmpMetadata(records, archiveProfile);
 }
 
-static String buildDescription(EmailRecord r) {
-  return METADATA.buildDescription(r);
-}
-
-static String buildArchiveDescription(List<EmailRecord> records, String archiveProfile) {
-  return METADATA.buildArchiveDescription(records, archiveProfile);
-}
-
-static String buildArchiveTitle(List<EmailRecord> records) {
-  return METADATA.buildArchiveTitle(records);
-}
-
-static boolean shouldEmitRawSent(EmailRecord r) {
-  return METADATA.shouldEmitRawSent(r);
-}
-
 static int messageMetadataSize(EmailRecord r) {
   return METADATA.messageMetadataSize(r);
 }
@@ -1238,33 +959,6 @@ static void addArchiveOutlines(PDDocument doc, List<MessageSegment> segments, in
     outline.addLast(item);
     addMessageSectionOutlines(pages::get, item, segment.record, segment.startPage, segment.endPage);
     ConversionProgress.advance("bookmarks");
-  }
-  outline.openNode();
-}
-
-static void addCollectionNavigationOutlines(PDDocument doc, List<FolderSection> sections) {
-  if (doc.getNumberOfPages() == 0) return;
-  PDDocumentCatalog cat = doc.getDocumentCatalog();
-  PDDocumentOutline outline = new PDDocumentOutline();
-  cat.setDocumentOutline(outline);
-
-  PDOutlineItem home = new PDOutlineItem();
-  home.setTitle("Folders");
-  setOutlineDestination(doc, home, 1);
-  outline.addLast(home);
-
-  for (FolderSection section : sections) {
-    PDOutlineItem folder = new PDOutlineItem();
-    folder.setTitle(section.folderName);
-    setOutlineDestination(doc, folder, section.summaryStartPage);
-    outline.addLast(folder);
-    for (MessageSegment segment : section.messageSegments) {
-      PDOutlineItem message = new PDOutlineItem();
-      message.setTitle(Common.nz(segment.record.subject).isBlank() ? "Email" : Common.nz(segment.record.subject));
-      setOutlineDestination(doc, message, segment.startPage);
-      folder.addLast(message);
-    }
-    if (!section.messageSegments.isEmpty()) folder.openNode();
   }
   outline.openNode();
 }
@@ -1357,43 +1051,6 @@ static void bindStructureNamespaces(COSBase value, COSObject standard, COSObject
     element.setItem(COSName.getPDFName("NS"), tag.startsWith("Mail_") ? mail : PDF17_STRUCTURE_ROLES.contains(tag) ? legacy : standard);
     bindStructureNamespaces(element.getDictionaryObject(COSName.K), standard, legacy, mail);
   }
-}
-
-static void bindContentSetPages(PDDocument doc, COSDictionary tree, COSDictionary element, int firstPage, int lastPage) throws IOException {
-  COSObject elementReference = PdfDocumentParts.indirect(doc, element);
-  COSDictionary paragraph = structElem("P", elementReference, doc.getPage(firstPage));
-  COSObject paragraphReference = PdfDocumentParts.indirect(doc, paragraph);
-  COSArray content = new COSArray();
-  COSDictionary parentTree = (COSDictionary) tree.getDictionaryObject(COSName.getPDFName("ParentTree"));
-  if (parentTree == null) {
-    parentTree = new COSDictionary();
-    parentTree.setItem(COSName.NUMS, new COSArray());
-    tree.setItem(COSName.getPDFName("ParentTree"), PdfDocumentParts.indirect(doc, parentTree));
-  }
-  COSArray numbers = (COSArray) parentTree.getDictionaryObject(COSName.NUMS);
-  for (int index = firstPage; index <= lastPage; index++) {
-    PDPage page = doc.getPage(index);
-    COSDictionary reference = new COSDictionary();
-    reference.setName(COSName.TYPE, "MCR");
-    reference.setItem(COSName.PG, PdfDocumentParts.indirect(doc, page.getCOSObject()));
-    reference.setInt(COSName.MCID, 0);
-    content.add(reference);
-    COSArray parents = new COSArray();
-    parents.add(paragraphReference);
-    numbers.add(COSInteger.get(index));
-    numbers.add(parents);
-    page.getCOSObject().setInt(COSName.getPDFName("StructParents"), index);
-    ByteArrayOutputStream wrapped = new ByteArrayOutputStream();
-    wrapped.write("/P << /MCID 0 >> BDC\n".getBytes(StandardCharsets.US_ASCII));
-    try (InputStream original = page.getContents()) {
-      original.transferTo(wrapped);
-    }
-    wrapped.write("\nEMC\n".getBytes(StandardCharsets.US_ASCII));
-    page.setContents(new PDStream(doc, new ByteArrayInputStream(wrapped.toByteArray()), COSName.FLATE_DECODE));
-  }
-  paragraph.setItem(COSName.K, content);
-  element.setItem(COSName.K, paragraphReference);
-  tree.setInt(COSName.getPDFName("ParentTreeNextKey"), doc.getNumberOfPages());
 }
 
 static COSDictionary ensureUserPropertiesAttribute(COSDictionary elem) {
@@ -1562,7 +1219,6 @@ static void addLogicalStructure(PDDocument doc, EmailRecord r) throws IOExceptio
   root.setItem(COSName.K, PdfDocumentParts.indirect(doc, message));
   tree.setItem(COSName.K, PdfDocumentParts.indirect(doc, root));
   addLogicalStructureNamespaces(doc, tree);
-  if (pdfUaFeaturesEnabled()) SemanticStructure.addDestinations(doc, tree);
   cat.getCOSObject().setItem(COSName.STRUCT_TREE_ROOT, PdfDocumentParts.indirect(doc, tree));
 }
 
@@ -1614,7 +1270,6 @@ static void addArchiveLogicalStructure(PDDocument doc, List<MessageSegment> segm
   root.setItem(COSName.K, children);
   tree.setItem(COSName.K, PdfDocumentParts.indirect(doc, root));
   addLogicalStructureNamespaces(doc, tree);
-  if (pdfUaFeaturesEnabled()) SemanticStructure.addDestinations(doc, tree);
   doc.getDocumentCatalog().getCOSObject().setItem(COSName.STRUCT_TREE_ROOT, PdfDocumentParts.indirect(doc, tree));
 }
 
@@ -1986,10 +1641,6 @@ static PDAnnotationFileAttachment inlineAttachmentBadgeAnnotation(PDDocument doc
   return PdfAttachmentSupport.inlineAttachmentBadgeAnnotation(doc, rect, fileSpec, contents);
 }
 
-static PDAppearanceDictionary buildAttachmentBadgeAppearance(PDDocument doc, float width, float height) throws Exception {
-  return PdfAttachmentSupport.buildAttachmentBadgeAppearance(doc, width, height);
-}
-
 static void normalizePageContentStreams(PDDocument doc) throws Exception {
   if (doc == null) return;
   for (PDPage page : doc.getPages()) {
@@ -2011,162 +1662,10 @@ static List<ArchiveEmbeddedFilePlan> buildArchiveEmbeddedFilePlans(List<EmailRec
   return PdfAttachmentSupport.buildArchiveEmbeddedFilePlans(records, PdfMailWriter::pdfEmbeddedFiles);
 }
 
-static List<CollectionFolder> buildCollectionFolders(List<FolderSection> sections) {
-  return PdfCollectionSupport.buildCollectionFolders(sections);
-}
-
-
-static List<FolderSection> buildFolderSections(List<EmailRecord> records) {
-  return PdfCollectionSupport.buildFolderSections(records);
-}
-
-static Map<String, PageLinkTarget> addFolderIndexPages(PDDocument doc, PDType0Font font, List<FolderSection> sections, String collectionProfile, CollectionRunSummary runSummary) throws Exception {
-  Map<String, PageLinkTarget> links = new LinkedHashMap<>();
-  if (sections.isEmpty()) return links;
-
-  final int rowsPerPage = 32;
-  int pageCount = Math.max(1, (sections.size() + rowsPerPage - 1) / rowsPerPage);
-  int sectionIndex = 0;
-  for (int pageNo = 0; pageNo < pageCount; pageNo++) {
-    PDPage page = new PDPage(PDRectangle.LETTER);
-    doc.addPage(page);
-    try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-      float pageWidth = page.getMediaBox().getWidth();
-      float pageHeight = page.getMediaBox().getHeight();
-      float margin = 46f;
-      float top = pageHeight - margin;
-      float rowHeight = 18f;
-      float y = top;
-
-      y = drawText(cs, font, 20f, margin, y, "Email Archive");
-      y = drawText(cs, font, 10.5f, margin, y - 8f,
-          "EA-PDF 1" + collectionProfile + " single-document navigation. Select a folder to jump to its in-document email list.");
-      y = drawText(cs, font, 10f, margin, y - 4f, "Harvested email(s): " + runSummary.harvestedEmails);
-      y = drawText(cs, font, 10f, margin, y - 2f,
-          "Run stats: " + runSummary.countsText());
-      y = drawText(cs, font, 10f, margin, y - 2f, "Generated: " + runSummary.generatedAt);
-      y -= 12f;
-      drawRule(cs, margin, y, pageWidth - margin, y);
-      y -= 16f;
-
-      float folderX = margin;
-      float messagesX = margin + 250f;
-      float sizeX = margin + 330f;
-      drawText(cs, font, 10f, folderX, y, "Folder");
-      drawText(cs, font, 10f, messagesX, y, "Messages");
-      drawText(cs, font, 10f, sizeX, y, "Size");
-      y -= 8f;
-      drawRule(cs, margin, y, pageWidth - margin, y);
-      y -= 14f;
-
-      for (int row = 0; row < rowsPerPage && sectionIndex < sections.size(); row++, sectionIndex++) {
-        FolderSection section = sections.get(sectionIndex);
-        float baseline = y;
-        drawText(cs, font, 10.5f, folderX, baseline, ellipsize(section.folderName, 34));
-        drawText(cs, font, 10.5f, messagesX, baseline, Integer.toString(section.records.size()));
-        drawText(cs, font, 10.5f, sizeX, baseline, humanReadableSize(section.totalSizeBytes));
-        links.put(section.folderName, new PageLinkTarget(doc.getNumberOfPages(),
-            new PDRectangle(folderX - 2f, baseline - 3f, 210f, 12f)));
-        y -= rowHeight;
-      }
-
-      y = 52f;
-      drawRule(cs, margin, y + 10f, pageWidth - margin, y + 10f);
-      drawText(cs, font, 9.5f, margin, y, "Folders are sorted alphabetically. Each folder section lists messages in chronological order.");
-    }
-  }
-  return links;
-}
-
-static Map<EmailRecord, PageLinkTarget> addFolderSummaryPages(PDDocument doc, PDType0Font font, FolderSection section, String collectionProfile) throws Exception {
-  Map<EmailRecord, PageLinkTarget> links = new IdentityHashMap<>();
-  if (section.records.isEmpty()) return links;
-
-  final int rowsPerPage = 24;
-  int recordIndex = 0;
-  int pageNumber = 0;
-  while (recordIndex < section.records.size()) {
-    pageNumber++;
-    PDPage page = new PDPage(PDRectangle.LETTER);
-    doc.addPage(page);
-    try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-      float pageWidth = page.getMediaBox().getWidth();
-      float pageHeight = page.getMediaBox().getHeight();
-      float margin = 36f;
-      float top = pageHeight - margin;
-      float rowHeight = 24f;
-      float y = top;
-
-      y = drawText(cs, font, 18f, margin, y, section.folderName);
-      y = drawText(cs, font, 10.5f, margin, y - 8f,
-          "EA-PDF 1" + collectionProfile + " folder section. Messages below are ordered chronologically.");
-      y -= 16f;
-      drawRule(cs, margin, y, pageWidth - margin, y);
-      y -= 16f;
-
-      float subjectX = margin;
-      float fromX = margin + 245f;
-      float toX = margin + 390f;
-      float sizeX = margin + 520f;
-      drawText(cs, font, 9.5f, subjectX, y, "Subject");
-      drawText(cs, font, 9.5f, fromX, y, "From");
-      drawText(cs, font, 9.5f, toX, y, "To");
-      drawText(cs, font, 9.5f, sizeX, y, "Size");
-      y -= 8f;
-      drawRule(cs, margin, y, pageWidth - margin, y);
-      y -= 14f;
-
-      for (int row = 0; row < rowsPerPage && recordIndex < section.records.size(); row++, recordIndex++) {
-        EmailRecord record = section.records.get(recordIndex);
-        float baseline = y;
-        drawText(cs, font, 9.75f, subjectX, baseline, ellipsize(collectionMemberSubject(record, recordIndex + 1), 40));
-        drawText(cs, font, 9.75f, fromX, baseline, ellipsize(Common.nz(record.from), 22));
-        drawText(cs, font, 9.75f, toX, baseline, ellipsize(Common.nz(record.to), 18));
-        drawText(cs, font, 9.75f, sizeX, baseline, humanReadableSize(messageMetadataSize(record)));
-        links.put(record, new PageLinkTarget(doc.getNumberOfPages(),
-            new PDRectangle(subjectX - 2f, baseline - 3f, sizeX - subjectX + 55f, 12f)));
-        y -= rowHeight;
-      }
-
-      drawRule(cs, margin, 54f, pageWidth - margin, 54f);
-      String footer = "Folder " + section.folderName + "  " + pageNumber + "/" + ((section.records.size() + rowsPerPage - 1) / rowsPerPage);
-      drawText(cs, font, 9.5f, margin, 40f, footer);
-    }
-    addPageNavigationChrome(doc, font, page, "Folders", 1, null, 0);
-  }
-  return links;
-}
 
 static float drawText(PDPageContentStream cs, PDType0Font font, float fontSize, float x, float y, String text) throws Exception {
   FontSupport.draw(cs, font, fontSize, x, y, text);
   return y - fontSize;
-}
-
-static void drawRule(PDPageContentStream cs, float x1, float y1, float x2, float y2) throws Exception {
-  SemanticStructure.beginGroup(cs, "Artifact");
-  cs.moveTo(x1, y1);
-  cs.lineTo(x2, y2);
-  cs.stroke();
-  SemanticStructure.endGroup(cs);
-}
-
-static String ellipsize(String s, int maxChars) {
-  String value = Common.nz(s).trim();
-  if (value.length() <= maxChars) return value;
-  if (maxChars <= 3) return value.substring(0, Math.max(0, maxChars));
-  return value.substring(0, maxChars - 3) + "...";
-}
-
-static String humanReadableSize(long bytes) {
-  if (bytes < 1024) return bytes + " B";
-  double value = bytes;
-  String[] units = { "KB", "MB", "GB", "TB" };
-  int unitIndex = -1;
-  while (value >= 1024 && unitIndex + 1 < units.length) {
-    value /= 1024.0;
-    unitIndex++;
-  }
-  return String.format(Locale.ROOT, value >= 100 ? "%.0f %s" : "%.2f %s", value, units[Math.max(0, unitIndex)]);
 }
 
 static String sanitizePdfText(PDType0Font font, String text) throws Exception {
@@ -2199,98 +1698,12 @@ static boolean fontCanEncode(PDType0Font font, int codePoint) {
   }
 }
 
-static void applyPageLinks(PDDocument doc, Collection<PageLinkTarget> links) throws Exception {
-  if (links == null) return;
-  for (PageLinkTarget link : links) {
-    if (link == null || link.targetPageNumber <= 0) continue;
-    PDPage source = doc.getPage(Math.max(0, link.sourcePageNumber - 1));
-    PDPage target = doc.getPage(Math.max(0, link.targetPageNumber - 1));
-    PDAnnotationLink annotation = new PDAnnotationLink();
-    configureLinkAnnotation(annotation, link.rect);
-    PDActionGoTo action = new PDActionGoTo();
-    PDPageFitWidthDestination dest = new PDPageFitWidthDestination();
-    dest.setPage(target);
-    action.setDestination(dest);
-    annotation.setAction(action);
-    source.getAnnotations().add(annotation);
-  }
-}
-
-static void addPageNavigationChrome(PDDocument doc, PDType0Font font, PDPage page,
-                                    String primaryLabel, int primaryTargetPage,
-                                    String secondaryLabel, int secondaryTargetPage) throws Exception {
-  if (page == null) return;
-  String primary = sanitizePdfText(font, primaryLabel);
-  String secondary = sanitizePdfText(font, secondaryLabel);
-  float fontSize = 9f;
-  float rightMargin = 36f;
-  float topY = page.getMediaBox().getHeight() - 18f;
-  float separatorWidth = textWidth(font, fontSize, " | ");
-  float secondaryWidth = secondary.isBlank() ? 0f : textWidth(font, fontSize, secondary);
-  float primaryWidth = primary.isBlank() ? 0f : textWidth(font, fontSize, primary);
-  float totalWidth = primaryWidth + (secondary.isBlank() ? 0f : separatorWidth + secondaryWidth);
-  float startX = page.getMediaBox().getWidth() - rightMargin - totalWidth;
-
-  try (PDPageContentStream cs = new PDPageContentStream(doc, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
-    FontSupport.draw(cs, font, fontSize, startX, topY, primary + (secondary.isBlank() ? "" : " | " + secondary));
-  }
-
-  if (!primary.isBlank() && primaryTargetPage > 0) {
-    addDirectPageLink(doc, page, new PDRectangle(startX - 1f, topY - 2f, primaryWidth + 2f, 11f), primaryTargetPage);
-  }
-  if (!secondary.isBlank() && secondaryTargetPage > 0) {
-    float secondaryX = startX + primaryWidth + separatorWidth;
-    addDirectPageLink(doc, page, new PDRectangle(secondaryX - 1f, topY - 2f, secondaryWidth + 2f, 11f), secondaryTargetPage);
-  }
-}
-
 static float textWidth(PDType0Font font, float fontSize, String text) throws Exception {
   return FontSupport.width(font, fontSize, text);
 }
 
-static void addDirectPageLink(PDDocument doc, PDPage sourcePage, PDRectangle rect, int targetPageNumber) throws Exception {
-  PDPage target = doc.getPage(Math.max(0, targetPageNumber - 1));
-  PDAnnotationLink annotation = new PDAnnotationLink();
-  configureLinkAnnotation(annotation, rect);
-  PDActionGoTo action = new PDActionGoTo();
-  PDPageFitWidthDestination dest = new PDPageFitWidthDestination();
-  dest.setPage(target);
-  action.setDestination(dest);
-  annotation.setAction(action);
-  sourcePage.getAnnotations().add(annotation);
-}
-
-static void writeFolderMessageCollection(Path out, List<EmailRecord> records, String fontPath, String iccPath, boolean debug, Path debugDir,
-                                         String collectionProfile, String folderName) throws Exception {
-  PdfCollectionSupport.writeFolderMessageCollection(out, records, fontPath, iccPath, debug, debugDir, collectionProfile, folderName);
-}
-
-static List<CollectionMember> buildMessageCollectionMembers(List<EmailRecord> records, String fontPath, String iccPath, boolean debug, Path debugDir, String collectionProfile) throws Exception {
-  return PdfCollectionSupport.buildMessageCollectionMembers(records, fontPath, iccPath, debug, debugDir, collectionProfile);
-}
-
-static String childProfileForCollection(String collectionProfile, int count) {
-  return PdfCollectionSupport.childProfileForCollection(collectionProfile, count);
-}
-
-static String collectionMemberFilename(String groupName, String childProfile, int index) {
-  return PdfCollectionSupport.collectionMemberFilename(groupName, childProfile, index);
-}
-
-static String collectionFolderDisplay(EmailRecord record) {
-  return PdfCollectionSupport.collectionFolderDisplay(record);
-}
-
-static String collectionMemberSubject(EmailRecord record, int index) {
-  return PdfCollectionSupport.collectionMemberSubject(record, index);
-}
-
 static List<EmailRecord> sortRecordsChronologically(List<EmailRecord> records) {
   return PdfCollectionSupport.sortRecordsChronologically(records);
-}
-
-static List<EmailRecord> sortRecordsReverseChronologically(List<EmailRecord> records) {
-  return PdfCollectionSupport.sortRecordsReverseChronologically(records);
 }
 
 
@@ -2298,10 +1711,6 @@ static List<String> collectionGroupNames(EmailRecord record) {
   return PdfCollectionSupport.collectionGroupNames(record);
 }
 
-
-static void embedCollectionFiles(PDDocument doc, List<EmailRecord> records, List<CollectionMember> members, boolean debug, boolean topLevelFolders) throws Exception {
-  PdfCollectionSupport.embedCollectionFiles(doc, records, members, debug, topLevelFolders);
-}
 
 static void addEmbeddedPlan(PDDocument doc, COSArray afArray, Map<String, PDComplexFileSpecification> nameMap,
                             String nameTreeKey, String filename, String mime, String relationship, String checksumMd5, byte[] bytes,
@@ -2348,22 +1757,6 @@ static void addEmbeddedPlan(PDDocument doc, COSArray afArray, Map<String, PDComp
   afArray.add(fs.getCOSObject());
 }
 
-static COSDictionary topLevelCollectionItemDictionary(CollectionMember member) {
-  return PdfCollectionSupport.topLevelCollectionItemDictionary(member);
-}
-
-static void repairSavedTopLevelCollection(Path pdfPath, List<CollectionFolder> folders, List<CollectionMember> members, boolean debug) throws Exception {
-  PdfCollectionSupport.repairSavedTopLevelCollection(pdfPath, folders, members, debug);
-}
-
-static void rewriteTopLevelCollectionItems(PDDocument doc, List<CollectionMember> members) throws Exception {
-  PdfCollectionSupport.rewriteTopLevelCollectionItems(doc, members);
-}
-
-static COSDictionary messageCollectionItemDictionary(CollectionMember member) {
-  return PdfCollectionSupport.messageCollectionItemDictionary(member);
-}
-
 static String reserveAttachmentKey(Set<String> normalizedNames, String name) {
   return PdfAttachmentSupport.reserveAttachmentKey(normalizedNames, name);
 }
@@ -2372,24 +1765,8 @@ static String uniqueAttachmentKey(Map<String, ?> names, String name) {
   return PdfAttachmentSupport.uniqueAttachmentKey(names, name);
 }
 
-static String numberedAttachmentKey(Map<String, ?> names, String name, int seq, int total) {
-  return PdfAttachmentSupport.numberedAttachmentKey(names, name, seq, total);
-}
-
 static String normalizeAfRelationship(String s) {
   return PdfAttachmentSupport.normalizeAfRelationship(s);
-}
-
-static AssociatedFile findLocationAsset(String uri, EmailRecord record) {
-  return MailRenderPolicy.findLocationAsset(uri, record);
-}
-
-static boolean sameEmbeddedLocation(String value, String location, String base) {
-  return MailRenderPolicy.sameEmbeddedLocation(value, location, base);
-}
-
-static AssociatedFile findCidAsset(String value, List<AssociatedFile> files) {
-  return MailRenderPolicy.findCidAsset(value, files);
 }
 
 static String rewriteCidToFileUris(String html, List<AssociatedFile> files, EmailRecord r, boolean debug, Path assetDir) throws Exception {
@@ -2404,24 +1781,11 @@ static boolean looksEmpty(String html) {
   return HTML.looksEmpty(html);
 }
 
-static boolean shouldBoldHeaderLabel(String label) {
-  return HTML.shouldBoldHeaderLabel(label);
-}
-
-static void appendHeaderRow(StringBuilder s, String label, String value) {
-  HTML.appendHeaderRow(s, label, value);
-}
-
 static String appendStyle(String existing, String add) {
   String e = Common.nz(existing).trim();
   if (e.isBlank()) return add;
   if (!e.endsWith(";")) e += ";";
   return e + add;
-}
-
-static String chooseOutputAssetName(String filename, String mime, String cid) {
-  if (filename != null && !filename.isBlank()) return safeAssetFilename(filename);
-  return safeAssetFilename("cid-" + cid + Common.extensionForMime(mime, filename));
 }
 
 static String safeAssetFilename(String s) {

@@ -6,7 +6,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
@@ -96,37 +95,6 @@ final class PdfCollectionSupport {
     catch (Exception error) { document.close(); throw error; }
   }
 
-  static String buildMessageCollectionRenderHtml(List<PdfCollectionSupport.CollectionMember> members, String collectionProfile, String folderName) {
-    StringBuilder s = new StringBuilder();
-    s.append("<!DOCTYPE html><html><head><meta charset=\"utf-8\"/>");
-    s.append("<style>");
-    s.append("@page { size: letter; margin: 0.65in; }");
-    s.append("html, body, body * { font-family: ArchiveFont !important; }");
-    s.append("body { font-size: 11pt; color: #222; line-height: 1.35; }");
-    s.append("h1 { font-size: 20pt; margin: 0 0 8px; }");
-    s.append("p { margin: 0 0 10px; }");
-    s.append(".lede { color: #5f5544; margin-bottom: 16px; }");
-    s.append(".member-list { margin-top: 14px; }");
-    s.append(".member { border: 1px solid #d7c7ae; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fcfaf6; }");
-    s.append(".member-name { font-weight: bold; font-size: 12pt; color: #1f3f5b; }");
-    s.append(".member-meta { color: #675b4f; font-size: 10pt; margin-top: 3px; }");
-    s.append(".member-file { color: #3e4f63; font-family: monospace; font-size: 10pt; margin-top: 4px; }");
-    s.append("</style></head><body>");
-    s.append("<h1>").append(Common.escapeHtml(folderName)).append("</h1>");
-    s.append("<p class=\"lede\">EA-PDF 1").append(Common.escapeHtml(collectionProfile)).append(" folder collection. Embedded child EA-PDF files are listed in chronological order.</p>");
-    s.append("<div class=\"member-list\">");
-    for (PdfCollectionSupport.CollectionMember member : members) {
-      s.append("<div class=\"member\">");
-      s.append("<div class=\"member-name\">").append(Common.escapeHtml(member.subject)).append("</div>");
-      s.append("<div class=\"member-meta\">Child profile: EA-PDF 1").append(Common.escapeHtml(member.childProfile)).append("</div>");
-      s.append("<div class=\"member-file\">Embedded file: ").append(Common.escapeHtml(member.filename)).append("</div>");
-      s.append("</div>");
-    }
-    s.append("</div>");
-    s.append("</body></html>");
-    return Common.stripInvalidXml(s.toString());
-  }
-
   static List<String> collectionGroupNames(EmailRecord record) {
     LinkedHashSet<String> out = new LinkedHashSet<>();
     String raw = Common.nz(record == null ? "" : record.folderPath);
@@ -176,11 +144,7 @@ final class PdfCollectionSupport {
     List<PdfCollectionSupport.FolderSection> sections = new ArrayList<>();
     for (Map.Entry<String, List<EmailRecord>> entry : groups.entrySet()) {
       List<EmailRecord> groupRecords = sortRecordsChronologically(entry.getValue());
-      PdfCollectionSupport.FolderSection section = new PdfCollectionSupport.FolderSection(entry.getKey(), groupRecords);
-      int totalSize = 0;
-      for (EmailRecord record : groupRecords) totalSize += Math.max(0, PdfMailWriter.messageMetadataSize(record));
-      section.totalSizeBytes = totalSize;
-      sections.add(section);
+      sections.add(new FolderSection(entry.getKey(), groupRecords));
     }
     return sections;
   }
@@ -255,7 +219,7 @@ final class PdfCollectionSupport {
       PdfCollectionSupport.CollectionFolder folder, int index, int order, String fontPath, String iccPath,
       boolean debug, Path debugDir, String collectionProfile, PayloadStore memberStore) throws Exception {
     String subject = collectionMemberSubject(record, order);
-    String childProfile = childProfileForCollection(collectionProfile, 1);
+    String childProfile = "ci".equals(collectionProfile) ? "si" : "s";
     String filename = collectionMemberFilename(subject, childProfile, index);
     record.embedSourceMessage = !"ci".equals(collectionProfile);
     Path childPath = memberStore == null ? null : memberStore.createPdf();
@@ -370,11 +334,10 @@ final class PdfCollectionSupport {
     root.setItem(COSName.K, PdfDocumentParts.indirect(doc, content));
     tree.setItem(COSName.K, PdfDocumentParts.indirect(doc, root));
     PdfMailWriter.addLogicalStructureNamespaces(doc, tree);
-    if (PdfMailWriter.pdfUaFeaturesEnabled()) SemanticStructure.addDestinations(doc, tree);
     doc.getDocumentCatalog().getCOSObject().setItem(COSName.STRUCT_TREE_ROOT, PdfDocumentParts.indirect(doc, tree));
   }
 
-  static void embedCollectionFiles(PDDocument doc, List<EmailRecord> records, List<PdfCollectionSupport.CollectionMember> members, boolean debug, boolean topLevelFolders) throws Exception {
+  static void embedCollectionFiles(PDDocument doc, List<EmailRecord> records, List<PdfCollectionSupport.CollectionMember> members, boolean debug) throws Exception {
     PDDocumentCatalog cat = doc.getDocumentCatalog();
     COSDictionary catd = cat.getCOSObject();
 
@@ -401,7 +364,7 @@ final class PdfCollectionSupport {
     for (PdfCollectionSupport.CollectionMember member : members) {
       AssociatedFile af = new AssociatedFile();
       af.description = "Contained EA-PDF message";
-      String nameTreeKey = topLevelFolders && member.folderId > 0 ? ("<" + member.folderId + ">" + member.filename) : member.filename;
+      String nameTreeKey = member.folderId > 0 ? ("<" + member.folderId + ">" + member.filename) : member.filename;
       EmailRecord message = member.records.size() == 1 ? member.records.get(0) : null;
       PDComplexFileSpecification existing = message == null ? null : childFiles.get(message);
       if (existing != null) {
@@ -409,7 +372,7 @@ final class PdfCollectionSupport {
         if (debug) System.out.println("[debug] collection member embedded: " + member.filename + " messages=" + member.records.size());
         continue;
       }
-      COSDictionary collectionItem = topLevelFolders ? topLevelCollectionItemDictionary(member) : messageCollectionItemDictionary(member);
+      COSDictionary collectionItem = topLevelCollectionItemDictionary(member);
       af.bytes = member.pdfBytes;
       af.dataPath = member.pdfPath;
       af.storedSize = member.pdfSize();
@@ -429,11 +392,6 @@ final class PdfCollectionSupport {
     efs.setNames(nameMap);
     names.setEmbeddedFiles(efs);
     cat.setNames(names);
-    MetadataSearchIndex.embed(doc, members, childFiles, nameMap);
-  }
-
-  static void repairSavedTopLevelCollection(Path pdfPath, List<PdfCollectionSupport.CollectionFolder> folders, List<PdfCollectionSupport.CollectionMember> members, boolean debug) throws Exception {
-    repairSavedTopLevelCollection(pdfPath, folders, members, debug, null);
   }
 
   static void repairSavedTopLevelCollection(Path pdfPath, List<PdfCollectionSupport.CollectionFolder> folders,
@@ -447,107 +405,11 @@ final class PdfCollectionSupport {
     }, expected);
   }
 
-  static void writeFolderMessageCollection(Path out, List<EmailRecord> records, String fontPath, String iccPath, boolean debug, Path debugDir,
-                                           String collectionProfile, String folderName) throws Exception {
-    if (records == null || records.isEmpty()) throw new IllegalArgumentException("records must not be empty");
-    PreservationInventory expected = PreservationInventory.capture(records, collectionProfile);
-    List<PdfCollectionSupport.CollectionMember> members = buildMessageCollectionMembers(records, fontPath, iccPath, debug, debugDir, collectionProfile);
-    if (members.isEmpty()) throw new IllegalArgumentException("collection requires at least one embedded EA-PDF member");
-
-    EmailRecord debugRecord = new EmailRecord();
-    String html = buildMessageCollectionRenderHtml(members, collectionProfile, folderName);
-    byte[] rendered = PdfMailWriter.renderHtmlPdf(html, PdfMailWriter.ROOT_URI(), fontPath, debugRecord, debug);
-
-    try (PDDocument doc = Loader.loadPDF(rendered)) {
-      doc.setVersion(2.0f);
-      doc.getDocument().setVersion(2.0f);
-      PdfMailWriter.clearImageInterpolation(doc);
-      PdfMailWriter.setDocumentInfo(doc, records.get(0));
-      PdfMailWriter.configureArchiveCatalog(doc, collectionProfile);
-      addMessageCollectionDictionary(doc);
-      PdfMailWriter.addOutlines(doc, buildCollectionFrontRecord(records, collectionProfile, members));
-      addCollectionDPartStructure(doc, records, collectionProfile);
-      PdfMailWriter.drawPageContext(doc, fontPath);
-      addCollectionLogicalStructure(doc);
-      PdfMailWriter.setPdfA3Metadata(doc, iccPath, records, collectionProfile);
-      embedCollectionFiles(doc, records, members, debug, false);
-      addMessageCollectionDictionary(doc);
-      Files.createDirectories(out.getParent() == null ? Paths.get(".") : out.getParent());
-      SemanticStructure.balanceParentTree(doc);
-      Common.writePdfAtomically(out, temporary -> PdfFontMetadata.save(doc, temporary.toFile()), expected);
-    }
-  }
-
-  static List<PdfCollectionSupport.CollectionMember> buildMessageCollectionMembers(List<EmailRecord> records, String fontPath, String iccPath, boolean debug, Path debugDir, String collectionProfile) throws Exception {
-    List<PdfCollectionSupport.CollectionMember> members = new ArrayList<>();
-    List<EmailRecord> ordered = sortRecordsChronologically(records);
-    int parallelism = PdfMailWriter.renderParallelism(ordered.size());
-    if (parallelism <= 1) {
-      int index = 0;
-      for (EmailRecord record : ordered) {
-        index++;
-        String folderName = collectionFolderDisplay(record);
-        String subject = collectionMemberSubject(record, index);
-        String childProfile = childProfileForCollection(collectionProfile, 1);
-        String filename = collectionMemberFilename(subject, childProfile, index);
-        record.embedSourceMessage = !"ci".equals(collectionProfile);
-        PdfMailWriter.SingleMessageBuildResult built = PdfMailWriter.buildSingleMessagePdf(Path.of(filename), record, fontPath, iccPath, debug, debugDir.resolve("collection_child_" + index), 1, childProfile);
-        byte[] pdfBytes = built.pdfBytes;
-        int attachmentCount = Math.max(record.attachmentCount, 0);
-        String latestSent = Common.nz(record.date);
-        members.add(new PdfCollectionSupport.CollectionMember(folderName, subject, childProfile, List.of(record), 0, index, filename, pdfBytes, attachmentCount, latestSent));
-      }
-    } else {
-      ExecutorService pool = Common.newWorkers(parallelism);
-      try {
-        List<Future<PdfCollectionSupport.CollectionMember>> futures = new ArrayList<>();
-        for (int i = 0; i < ordered.size(); i++) {
-          final int index = i + 1;
-          final EmailRecord record = ordered.get(i);
-          futures.add(pool.submit(() -> {
-            String folderName = collectionFolderDisplay(record);
-            String subject = collectionMemberSubject(record, index);
-            String childProfile = childProfileForCollection(collectionProfile, 1);
-            String filename = collectionMemberFilename(subject, childProfile, index);
-            record.embedSourceMessage = !"ci".equals(collectionProfile);
-            PdfMailWriter.SingleMessageBuildResult built = PdfMailWriter.buildSingleMessagePdf(Path.of(filename), record, fontPath, iccPath, debug, debugDir.resolve("collection_child_" + index), 1, childProfile);
-            byte[] pdfBytes = built.pdfBytes;
-            int attachmentCount = Math.max(record.attachmentCount, 0);
-            String latestSent = Common.nz(record.date);
-            PdfCollectionSupport.CollectionMember member = new PdfCollectionSupport.CollectionMember(folderName, subject, childProfile, List.of(record), 0, index, filename, pdfBytes, attachmentCount, latestSent);
-            return member;
-          }));
-        }
-        for (Future<PdfCollectionSupport.CollectionMember> future : futures) members.add(Common.awaitWorker(future));
-      } catch (ExecutionException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof Exception ex) throw ex;
-        throw new RuntimeException(cause);
-      } finally {
-        Common.stopWorkers(pool);
-      }
-      members.sort(Comparator.comparingInt(member -> member.orderIndex));
-    }
-    return members;
-  }
-
-  static String childProfileForCollection(String collectionProfile, int count) {
-    boolean isolated = "ci".equals(collectionProfile);
-    if (count <= 1) return isolated ? "si" : "s";
-    return isolated ? "mi" : "m";
-  }
-
   static String collectionMemberFilename(String groupName, String childProfile, int index) {
     String rawStem = Common.safeFileStem(Common.nz(groupName).isBlank() ? ("folder_" + index) : groupName);
     String stem = rawStem.replaceAll("\\.{2,}", "_").replaceAll("\\s+", " ").trim();
     if (stem.isBlank()) stem = "message";
     return String.format("%s_%06d_1%s.pdf", stem, index, childProfile);
-  }
-
-  static String collectionFolderDisplay(EmailRecord record) {
-    List<String> names = collectionGroupNames(record);
-    if (names.isEmpty()) return "Messages";
-    return String.join(", ", names);
   }
 
   static String collectionMemberSubject(EmailRecord record, int index) {
@@ -810,10 +672,6 @@ static class CollectionMember {
     pdfBytes = null;
   }
 
-  byte[] pdfData() throws IOException {
-    return pdfBytes != null ? pdfBytes : Files.readAllBytes(pdfPath);
-  }
-
   int pdfSize() {
     return pdfBytes != null ? pdfBytes.length : storedPdfSize;
   }
@@ -833,9 +691,6 @@ static class CollectionFolder {
 static class FolderSection {
   final String folderName;
   final List<EmailRecord> records;
-  final List<MessageSegment> messageSegments = new ArrayList<>();
-  int summaryStartPage;
-  int totalSizeBytes;
 
   FolderSection(String folderName, List<EmailRecord> records) {
     this.folderName = folderName;

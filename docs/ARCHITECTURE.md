@@ -1,38 +1,36 @@
 # Code layout
 
-The project has three parts: create PDFs, check PDFs, and read PDFs.
-The browser reader runs without Java or a server.
+EA-PDF Lite includes the EML command-line creator, the Java command-line
+validator, and the Even More Lite browser reader. The reader runs without Java
+or a server. Lite Creator uses the Jakarta Mail API with Angus Core to
+read local EML. It retains the document structure required by EA-PDF.
 
-Normal development continues in this GitHub-main checkout. The retained
-`experiment/c2pa-pades` checkout is separate; its C2PA/PAdES coordinator, export
-verification, experimental viewer identity and other local additions are not
-automatically merged here. Even More Lite and its required reader helpers were
-explicitly selected on 18 November 2026; C2PA/PAdES remains separate. Selected maintenance fixes are transferred independently.
+The full product and maintained reader exporter are in [EA-PDF Main](https://github.com/thinkbox-digital/eapdf).
+The C2PA/PAdES experiment is in [EA-PDF Secure](https://github.com/thinkbox-digital/eapdf-secure).
+Main owns shared dependency pins, EA-PDF rules, validator code and shared creator
+code. Apply shared maintenance fixes to Lite as described in the
+[cross-edition workflow](https://github.com/thinkbox-digital/eapdf/blob/main/docs/ARCHITECTURE.md#cross-edition-improvements).
 
 The Python inspection oracle remains a development tool. Its frozen manifest
 records exact package versions and source hashes. Dependency updates require an
 explicit provenance refresh and review; tests do not rewrite expected records.
 
-[Architecture diagram (PDF)](EA-PDF_Software_Architecture.pdf)
+[Lite architecture diagram (PDF)](EA-PDF_Software_Architecture.pdf)
 
 ## Where to work
 
 | Part | Main files |
 | --- | --- |
-| Local email readers | `src/main/java/eapdf/`: `EmlReader`, `MsgReader`, `PstReader`, `MboxReader` |
-| Gmail reader | `GmailDownloadToPdf` |
+| Local EML reader | `src/main/java/eapdf/EmlReader.java` |
 | Conversion | `EmailToPDFA`, `PdfMailWriter` |
 | HTML rendering | `MailHtmlRenderer`, `MailRenderPolicy` |
 | Metadata, attachments, collections | `PdfMetadataWriter`, `PdfAttachmentSupport`, `PdfCollectionSupport` |
 | Conversion workers and saved output | `ConversionSupervisor`, `OutputTransaction`, `PreservationInventory` |
-| Creator window | `EapdfGui`, `GuiConversionProcess`, `GuiRunConfiguration` |
-| Java validation | `validator-desktop/src/main/java/eapdf/`: `JavaValidation`, `ValidationSession`, check classes |
-| Validator window and reports | `ValidatorGui`, `ValidationReportReader`, `ReportFindings` |
+| Java validation and JSON reports | `validator-desktop/src/main/java/eapdf/`: `JavaValidation`, `ValidationSession`, check classes |
 | Python validation | `validate_eapdf.py`, `eapdf_validation/` |
 | Validation workers | `validation_worker.py`, `pdf_stream_limits.py` |
 | Browser reader | `browser-viewer/src/`: `viewer.ts`, `browser-session.ts`, `domain/` |
-| Reader panels | `message-tree.ts`, `files-panel.ts`, `search-controller.ts` |
-| Full-reader extras | `collection-view.ts`, `portfolio.ts`, `conversations.ts`, `thread-preview.ts` |
+| Reader navigation and assets | `navigation.ts`, `asset-panel.ts`, `scrolling-pages.ts` |
 
 ## Ownership rules
 
@@ -131,7 +129,6 @@ and the [documentation map](README.md).
 The former web workbench and its deployment files are removed. The Java validator
 is the normal checking tool; Python CLI code remains for regressions and diagnostics.
 
-Rebuild the diagram with `scripts/build_architecture_diagram.py`, passing the
-current creator and validator JARs. It reads versions and rule counts from source
-and draws arrows downward from each tool to its libraries. Regenerate it before
-every push.
+Run `scripts/build_architecture_diagram.py` with the Lite creator and validator
+JARs to rebuild and validate the diagram. It reads versions and rule counts
+from source and draws arrows downward from each tool to its libraries.

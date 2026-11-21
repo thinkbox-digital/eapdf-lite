@@ -322,9 +322,7 @@ def main():
     if not shutil.which('java'): parser.error('Java is not installed.')
     running=active_conversion(ROOT)
     if running: parser.error('Another Java conversion is using out/ (PID '+running+'). Wait for it to finish.')
-    for key in ('branding','findingAid','premis'): config.pop(key,None)
-    config.setdefault('accessibility',{})['addPdfUaFeatures']=True
-    config['searchIndex']={'enabled':True,'fullTextEnabled':True}
+    for key in ('branding','findingAid','premis','accessibility','searchIndex'): config.pop(key,None)
     config['validationWarning']=''
     config.setdefault('signing',{})['enabled']=False
     (ROOT/'output').mkdir(exist_ok=True)

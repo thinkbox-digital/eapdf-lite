@@ -1,14 +1,11 @@
 package eapdf;
 
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.SocketException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,12 +21,9 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import org.apache.poi.poifs.filesystem.DirectoryNode;
-import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.simplejavamail.outlookmessageparser.OutlookMessageParser;
 
 class PreservationRegressionTests {
   @TempDir
@@ -91,79 +85,6 @@ class PreservationRegressionTests {
     Common.finalizeRecordMetadata(missing);
     Assertions.assertEquals("", missing.messageId);
     Assertions.assertFalse(missing.mailGuid.isBlank());
-  }
-
-  static void writeMessageStorage(DirectoryNode storage, int headerSize, String subject, String body, int attachments) throws Exception {
-    byte[] subjectBytes = (subject + "\0").getBytes(StandardCharsets.UTF_16LE);
-    byte[] bodyBytes = (body + "\0").getBytes(StandardCharsets.UTF_16LE);
-    byte[] headers = ("From: author@example.org\r\nTo: recipient@example.org\r\nDate: Tue, 13 Oct 2026 12:00:00 +0000\r\n\0")
-        .getBytes(StandardCharsets.UTF_16LE);
-    storage.createDocument("__substg1.0_0037001F", new ByteArrayInputStream(subjectBytes));
-    storage.createDocument("__substg1.0_1000001F", new ByteArrayInputStream(bodyBytes));
-    storage.createDocument("__substg1.0_007D001F", new ByteArrayInputStream(headers));
-    ByteBuffer properties = ByteBuffer.allocate(headerSize + 48).order(ByteOrder.LITTLE_ENDIAN);
-    properties.putLong(0).putInt(0).putInt(attachments).putInt(0).putInt(attachments);
-    properties.position(headerSize);
-    properties.putInt(0x0037001F).putInt(6).putInt(subjectBytes.length).putInt(0);
-    properties.putInt(0x1000001F).putInt(6).putInt(bodyBytes.length).putInt(0);
-    properties.putInt(0x007D001F).putInt(6).putInt(headers.length).putInt(0);
-    storage.createDocument("__properties_version1.0", new ByteArrayInputStream(properties.array()));
-  }
-
-  @Test
-  void attachedMsgPreservesNativeStreamsAndNestedStorage() throws Exception {
-    Path input = tempDir.resolve("parent.msg");
-    byte[] payload = new byte[] {0, 1, 2, 3, 127, -1};
-    try (POIFSFileSystem original = new POIFSFileSystem()) {
-      writeMessageStorage(original.getRoot(), 32, "Parent", "Parent body", 1);
-      DirectoryNode attachment = (DirectoryNode) original.getRoot().createDirectory("__attach_version1.0_#00000000");
-      attachment.createDocument("__properties_version1.0", new ByteArrayInputStream(new byte[8]));
-      attachment.createDocument("__substg1.0_3707001F", new ByteArrayInputStream("child.msg\0".getBytes(StandardCharsets.UTF_16LE)));
-      DirectoryNode child = (DirectoryNode) attachment.createDirectory("__substg1.0_3701000D");
-      writeMessageStorage(child, 24, "Attached child", "Attached body", 2);
-      DirectoryNode nested = (DirectoryNode) child.createDirectory("__attach_version1.0_#00000000");
-      nested.createDocument("__properties_version1.0", new ByteArrayInputStream(new byte[8]));
-      nested.createDocument("__substg1.0_37010102", new ByteArrayInputStream(payload));
-      DirectoryNode grandchildAttachment = (DirectoryNode) child.createDirectory("__attach_version1.0_#00000001");
-      grandchildAttachment.createDocument("__properties_version1.0", new ByteArrayInputStream(new byte[8]));
-      DirectoryNode grandchild = (DirectoryNode) grandchildAttachment.createDirectory("__substg1.0_3701000D");
-      writeMessageStorage(grandchild, 24, "Grandchild", "Deep message body", 0);
-      original.getRoot().createDirectory("__nameid_version1.0").createDocument("__substg1.0_00020102", new ByteArrayInputStream(new byte[0]));
-      try (var output = Files.newOutputStream(input)) {
-        original.writeFilesystem(output);
-      }
-    }
-    EmailRecord record = MsgReader.readMsg(input.toString(), "", List.of(), false);
-    AssociatedFile message = record.associatedFiles.stream().filter(file -> file.emailAttachment && file.filename.endsWith(".msg")).findFirst().orElseThrow();
-    var parsed = new OutlookMessageParser().parseMsg(new ByteArrayInputStream(message.bytes));
-    Assertions.assertEquals("Attached child", Common.stripInvalidXml(parsed.getSubject()));
-    Assertions.assertTrue(parsed.getBodyText().contains("Attached body"));
-    Assertions.assertTrue(parsed.getOutlookAttachments().stream().anyMatch(attachment ->
-        attachment instanceof org.simplejavamail.outlookmessageparser.model.OutlookMsgAttachment nested
-            && Common.stripInvalidXml(nested.getOutlookMessage().getSubject()).equals("Grandchild")));
-    try (POIFSFileSystem extracted = new POIFSFileSystem(new ByteArrayInputStream(message.bytes))) {
-      DirectoryNode nested = (DirectoryNode) extracted.getRoot().getEntry("__attach_version1.0_#00000000");
-      try (InputStream stream = nested.createDocumentInputStream("__substg1.0_37010102")) {
-        Assertions.assertArrayEquals(payload, stream.readAllBytes());
-      }
-      Assertions.assertTrue(extracted.getRoot().hasEntry("__nameid_version1.0"));
-      try (InputStream stream = extracted.getRoot().createDocumentInputStream("__properties_version1.0")) {
-        Assertions.assertEquals(80, stream.readAllBytes().length);
-      }
-    }
-    record.embedSourceMessage = true;
-    Path output = tempDir.resolve("attached_msg.pdf");
-    PdfMailWriter.writeEaPdfA3(output, record, TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, 1);
-    try (PDDocument document = Loader.loadPDF(output.toFile())) {
-      var embedded = document.getDocumentCatalog().getNames().getEmbeddedFiles().getNames();
-      Assertions.assertEquals(1, embedded.size());
-      byte[] source = embedded.values().iterator().next().getEmbeddedFileUnicode().toByteArray();
-      Assertions.assertArrayEquals(record.sourceBytes, source);
-      Path preservedSource = tempDir.resolve("preserved.msg");
-      Files.write(preservedSource, source);
-      EmailRecord decoded = MsgReader.readMsg(preservedSource.toString(), "", List.of(), false);
-      Assertions.assertTrue(decoded.associatedFiles.stream().anyMatch(file -> file.emailAttachment && java.util.Arrays.equals(message.bytes, file.bytes)));
-    }
   }
 
   @Test

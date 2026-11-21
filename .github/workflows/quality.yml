@@ -1,4 +1,4 @@
-name: Conversion quality
+name: Lite quality
 on:
   pull_request:
   push:
@@ -20,31 +20,25 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: mvn -B -Deapdf.build.directory=/tmp/eapdf-creator-build -Deapdf.signedIndexFixtures=/tmp/eapdf-signed-index-fixtures verify
+      - run: mvn -B -Deapdf.build.directory=/tmp/eapdf-creator-build verify
       - run: mvn -B -f validator-desktop/pom.xml -Deapdf.build.directory=/tmp/eapdf-validator-build verify
-      - name: Validate signed indexed archives
-        run: python3 scripts/check_signed_index.py --fixtures /tmp/eapdf-signed-index-fixtures --validator /tmp/eapdf-validator-build/eapdf-validator-$(cat VERSION).jar
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6.2.0
         with:
-          name: signed-index-fixtures
-          path: /tmp/eapdf-signed-index-fixtures
-          if-no-files-found: error
-  pdfjs-pin:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24.19.0'
-      - run: npm run verify:pdfjs
-        working-directory: browser-viewer
-      - run: node --test tests/pdfjs-pin.test.mjs
-        working-directory: browser-viewer
-  viewer-even-more-lite:
-    name: Standalone Even More Lite export
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-docs.txt
+      - name: Build and validate the Lite architecture diagram
+        run: |
+          version=$(cat VERSION)
+          python scripts/build_architecture_diagram.py \
+            --creator-jar "/tmp/eapdf-creator-build/emailtopdfa-lite-$version.jar" \
+            --validator-jar "/tmp/eapdf-validator-build/eapdf-validator-$version.jar" \
+            --output "$RUNNER_TEMP/EA-PDF_Software_Architecture.pdf"
+  viewer:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: browser-viewer
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -53,117 +47,16 @@ jobs:
           cache: npm
           cache-dependency-path: browser-viewer/package-lock.json
       - run: npm ci --ignore-scripts
-        working-directory: browser-viewer
-      - run: npm run build:even-more-lite
-        working-directory: browser-viewer
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: viewer-even-more-lite-local-builds
-          path: browser-viewer/releases/eapdf-viewer-even-more-lite-*
-          if-no-files-found: error
+      - run: npm run check
+      - run: npm run build
+      - run: npm test
   python-regressions:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6.2.0
         with:
           python-version: '3.12'
       - run: python -m pip install --require-hashes -r requirements-validator.lock
       - run: python -B -m unittest discover -s regression -v
-  viewer:
-    needs: java-builds
-    name: Viewer (${{ matrix.browser }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        browser: [chromium, firefox]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24.19.0'
-          cache: npm
-          cache-dependency-path: browser-viewer/package-lock.json
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r browser-viewer/reference/requirements.txt
-      - run: npm ci
-        working-directory: browser-viewer
-      - run: npm run check
-        working-directory: browser-viewer
-      - name: Install Chromium dependencies
-        run: |
-          npx playwright install --with-deps chromium
-          npx playwright install-deps firefox
-          echo "CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())")" >> "$GITHUB_ENV"
-        working-directory: browser-viewer
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: signed-index-fixtures
-          path: ${{ runner.temp }}/signed-index-fixtures
-      - name: Complete Chromium suite and independent inspection oracle
-        if: matrix.browser == 'chromium'
-        run: npm test && npm run test:m1 && npm run test:archive-memory
-        working-directory: browser-viewer
-      - name: Signed Chromium search and incremental-update fallback
-        if: matrix.browser == 'chromium'
-        env:
-          EAPDF_SIGNED_INDEX_FIXTURES: ${{ runner.temp }}/signed-index-fixtures
-        run: npm run test:fulltext-index
-        working-directory: browser-viewer
-      - name: Install pinned Firefox and WebDriver
-        if: matrix.browser == 'firefox'
-        run: python browser-viewer/scripts/install-ci-firefox.py "$RUNNER_TEMP/firefox-tools"
-      - name: Firefox temporary installation and UI acceptance
-        if: matrix.browser == 'firefox'
-        env:
-          FIREFOX_PATH: ${{ runner.temp }}/firefox-tools/firefox/firefox
-          GECKODRIVER_PATH: ${{ runner.temp }}/firefox-tools/geckodriver
-          M5_UI: '1'
-        run: npm run build && npm run test:firefox
-        working-directory: browser-viewer
-      - name: Signed Firefox search and highlighting
-        if: matrix.browser == 'firefox'
-        env:
-          FIREFOX_PATH: ${{ runner.temp }}/firefox-tools/firefox/firefox
-          GECKODRIVER_PATH: ${{ runner.temp }}/firefox-tools/geckodriver
-          EAPDF_SIGNED_INDEX_FIXTURES: ${{ runner.temp }}/signed-index-fixtures
-        run: npm run test:firefox
-        working-directory: browser-viewer
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: viewer-${{ matrix.browser }}-evidence
-          path: browser-viewer/test-results
-  conversion-acceptance:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r regression/quality/requirements.txt -r requirements-docs.txt
-      - run: python -B -m unittest discover -s regression/quality -v
-      - run: mvn -B -DskipTests -Deapdf.build.directory=/tmp/eapdf-acceptance-creator package
-      - run: mvn -B -f validator-desktop/pom.xml -DskipTests -Deapdf.build.directory=/tmp/eapdf-acceptance-validator package
-      - name: Build and validate the PDF manual
-        run: python scripts/manual/build_manual.py --creator-jar /tmp/eapdf-acceptance-creator/emailtopdfa-$(cat VERSION).jar --validator-jar /tmp/eapdf-acceptance-validator/eapdf-validator-$(cat VERSION).jar --output "$RUNNER_TEMP/EA-PDF_User_Manual.pdf"
-      - name: Build and validate the architecture diagram
-        run: python scripts/build_architecture_diagram.py --creator-jar /tmp/eapdf-acceptance-creator/emailtopdfa-$(cat VERSION).jar --validator-jar /tmp/eapdf-acceptance-validator/eapdf-validator-$(cat VERSION).jar --output "$RUNNER_TEMP/EA-PDF_Software_Architecture.pdf"
-      - name: Public source fidelity, visual and standalone Java validation gate
-        run: python scripts/check_conversion_quality.py --creator /tmp/eapdf-acceptance-creator/emailtopdfa-$(cat VERSION).jar --validator /tmp/eapdf-acceptance-validator/eapdf-validator-$(cat VERSION).jar --output "$RUNNER_TEMP/conversion-acceptance"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: conversion-acceptance-evidence
-          path: ${{ runner.temp }}/conversion-acceptance

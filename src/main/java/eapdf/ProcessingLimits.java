@@ -34,11 +34,6 @@ final class ProcessingLimits {
     if (Thread.currentThread().isInterrupted()) throw Common.fail("Email processing was cancelled");
   }
 
-  static void checkMime(int depth, long parts) {
-    checkCancelled();
-
-  }
-
   static void checkImage(int width, int height) {
     checkCancelled();
     long limit = Math.min(setting("eapdf.maxImagePixels", "EAPDF_MAX_IMAGE_PIXELS", Math.max(1024, Runtime.getRuntime().maxMemory() / 32)),

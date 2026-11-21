@@ -1,6 +1,8 @@
 # Documentation
 
-Start with the [user guide](manual/user-manual.html) or [PDF manual](EA-PDF_User_Manual.pdf).
+Start with the [Lite quick start](../README.md) and [Java validator guide](../validator-desktop/README.md).
+The [HTML manual](manual/user-manual.html) and [PDF manual](EA-PDF_User_Manual.pdf)
+describe the Main release.
 
 | Need | Read |
 | --- | --- |

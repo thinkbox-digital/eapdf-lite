@@ -11,8 +11,9 @@ Intermediate files stay in /tmp and are removed. The PDF manual is separate from
 the website; rebuild both after changing the guide.
 
 Screenshots use fictional mail and show earlier real application sessions.
-To refresh them, build the actual applications and reader, prepare the temporary
-fixtures with scripts/manual/prepare_capture.py, then use CaptureScreenshots.java
-and capture-browser.mjs. The latter now captures only the reader. Inspect the
+To refresh them, work from the ../eapdf-main checkout. Build the Main desktop
+applications and reader, prepare the temporary fixtures with
+scripts/manual/prepare_capture.py, then use CaptureScreenshots.java and
+capture-browser.mjs. The latter captures only the reader. Inspect the
 rendered manual, contents and bookmarks after rebuilding. Keep source files,
 font/license notices and the verification receipt. Remove only task-owned files.

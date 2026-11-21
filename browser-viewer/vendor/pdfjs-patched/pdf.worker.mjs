@@ -3769,12 +3769,6 @@ class ImageResizer {
 
 
 const emptyBuffer = new Uint8Array(0);
-class DecodeStreamLimitError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "DecodeStreamLimitError";
-  }
-}
 class DecodeStream extends BaseStream {
   buffer = emptyBuffer;
   bufferLength = 0;
@@ -3803,7 +3797,7 @@ class DecodeStream extends BaseStream {
   }
   ensureBuffer(requested) {
     if (requested > this.maxBufferLength) {
-      throw new DecodeStreamLimitError("Decoded stream byte limit exceeded");
+      throw new Error("Decoded stream byte limit exceeded");
     }
     const buffer = this.buffer;
     if (requested <= buffer.byteLength) {
@@ -3815,7 +3809,7 @@ class DecodeStream extends BaseStream {
     }
     const boundedSize = Math.min(size, this.maxBufferLength);
     if (boundedSize - buffer.byteLength > DecodeStream.remainingBudget) {
-      throw new DecodeStreamLimitError("Worker decoded-stream allocation limit exceeded");
+      throw new Error("Worker decoded-stream allocation limit exceeded");
     }
     DecodeStream.remainingBudget -= boundedSize - buffer.byteLength;
     const buffer2 = new Uint8Array(boundedSize);
@@ -3979,17 +3973,6 @@ class StreamsSequenceStream extends DecodeStream {
       }
     }
     return baseStreamsBuf.length > 0 ? baseStreamsBuf : null;
-  }
-}
-function discardStructuralStream(stream) {
-  const seen = new Set();
-  while (stream instanceof DecodeStream && !seen.has(stream)) {
-    seen.add(stream);
-    DecodeStream.remainingBudget += stream.buffer.byteLength;
-    stream.buffer = new Uint8Array(0);
-    stream.bufferLength = 0;
-    stream.eof = true;
-    stream = stream.str;
   }
 }
 
@@ -38890,10 +38873,6 @@ const TimeFormats = ["HH:MM", "h:MM tt", "HH:MM:ss", "h:MM:ss tt"];
 
 
 
-
-
-
-
 function embeddedAction(action) {
   const result = {
     steps: [],
@@ -38938,54 +38917,6 @@ function embeddedAction(action) {
   }
   return result;
 }
-async function folderThumbnail(image, xref) {
-  if (!(image instanceof BaseStream)) throw new Error("Folder thumbnail is unavailable.");
-  const pending = [image],
-    seen = new Set();
-  let pixels = 0;
-  while (pending.length) {
-    const stream = pending.pop();
-    if (seen.has(stream) || seen.size >= 4) throw new Error("Invalid thumbnail mask hierarchy.");
-    seen.add(stream);
-    const d = stream.dict,
-      w = d.get("Width", "W"),
-      h = d.get("Height", "H"),
-      length = d.get("Length");
-    if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 2048 || h > 2048 || (pixels += w * h) > 1048576 || !Number.isInteger(length) || length < 0 || length > 4194304) throw new Error("Folder thumbnail exceeds the preview budget.");
-    for (const key of ["SMask", "Mask"]) {
-      const mask = d.get(key);
-      if (mask instanceof BaseStream) pending.push(mask);
-    }
-  }
-  const decoded = await PDFImage.buildImage({
-    xref,
-    res: Dict.empty,
-    image,
-    pdfFunctionFactory: new PDFFunctionFactory({
-      xref
-    }),
-    globalColorSpaceCache: new GlobalColorSpaceCache(),
-    localColorSpaceCache: new LocalColorSpaceCache()
-  });
-  if (decoded.width * decoded.height > 1048576) throw new Error("Folder thumbnail exceeds the preview budget.");
-  return decoded.createImageData(true, false);
-}
-;// ./src/core/inspection_yield.js
-function yieldInspection() {
-  return new Promise(resolve => {
-    const {
-      port1,
-      port2
-    } = new MessageChannel();
-    port1.onmessage = () => {
-      port1.close();
-      port2.close();
-      resolve();
-    };
-    port2.postMessage(null);
-  });
-}
-
 ;// ./src/core/name_number_tree.js
 
 
@@ -39189,237 +39120,7 @@ class FileSpec {
   }
 }
 
-;// ./src/core/collection_presentation.js
-
-
-
-async function collectionPresentation(root, xref, thumbnails = null) {
-  const result = {
-    initial: null,
-    initialHex: null,
-    view: "D",
-    layouts: [],
-    fields: [],
-    sort: [],
-    ascending: [],
-    folders: [],
-    entries: [],
-    split: null,
-    colors: [],
-    notices: []
-  };
-  let steps = 0,
-    characters = 0;
-  const fetch = raw => raw instanceof Ref ? xref.fetch(raw) : raw;
-  const path = (raw, fallback) => raw instanceof Ref ? `object:${raw.num}:${raw.gen}` : fallback;
-  const check = () => {
-    if (++steps > 200000 || characters > 8 * 1024 * 1024) throw new Error("Portfolio metadata limit reached; listing is incomplete.");
-  };
-  const value = raw => {
-    check();
-    const v = fetch(raw);
-    if (typeof v === "string") {
-      characters += v.length;
-      if (v.length > 65536) throw new Error("Portfolio field exceeds text limit.");
-      return stringToPDFString(v, true);
-    }
-    if (v instanceof Name) {
-      characters += v.name.length;
-      if (v.name.length > 65536) throw new Error("Portfolio name exceeds text limit.");
-      return v.name;
-    }
-    if (typeof v === "boolean" || typeof v === "number" && Number.isFinite(v)) return v;
-    return null;
-  };
-  const hex = s => typeof s === "string" ? Array.from(s, c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("") : null;
-  const get = (d, k) => d instanceof Dict ? value(d.getRaw(k)) : null;
-  const list = raw => {
-    const v = fetch(raw);
-    return (Array.isArray(v) ? v.slice(0, 256) : [v]).map(value);
-  };
-  const keys = dict => {
-    const result = [];
-    for (const key of dict.getKeys()) {
-      check();
-      characters += key.length;
-      if (key.length > 65536) throw new Error("Portfolio key exceeds text limit.");
-      if (result.length === 256) {
-        notice(new Error("Portfolio has more than 256 metadata fields; extra fields are omitted."));
-        break;
-      }
-      result.push(key);
-    }
-    return result;
-  };
-  const item = spec => {
-    const ci = spec.get("CI"),
-      values = [];
-    if (ci instanceof Dict) for (const key of keys(ci)) {
-      if (key === "Type") continue;
-      const raw = ci.get(key);
-      values.push([key, raw instanceof Dict ? get(raw, "D") : value(raw), raw instanceof Dict ? get(raw, "P") : null]);
-    }
-    return values;
-  };
-  const notice = error => {
-    if (error instanceof MissingDataException) throw error;
-    const text = String(error.message || error);
-    if (!result.notices.includes(text)) result.notices.push(text);
-  };
-  try {
-    const col = root.get("Collection");
-    if (!(col instanceof Dict)) throw new Error("Collection dictionary is unavailable.");
-    const initial = col.get("D");
-    if (typeof initial === "string") {
-      result.initial = value(initial);
-      result.initialHex = hex(initial);
-    }
-    result.view = get(col, "View") || "D";
-    const navigator = col.get("Navigator");
-    if (navigator instanceof Dict) result.layouts = list(navigator.getRaw("Layout"));
-    const schema = col.get("Schema");
-    if (schema instanceof Dict) for (const key of keys(schema)) {
-      if (key === "Type") continue;
-      const f = schema.get(key);
-      if (!(f instanceof Dict)) {
-        notice(new Error("Invalid collection field: " + key));
-        continue;
-      }
-      result.fields.push({
-        key,
-        label: get(f, "N"),
-        subtype: get(f, "Subtype"),
-        order: get(f, "O"),
-        visible: get(f, "V") !== false
-      });
-    }
-    const sort = col.get("Sort");
-    if (sort instanceof Dict) {
-      result.sort = list(sort.getRaw("S"));
-      result.ascending = list(sort.getRaw("A"));
-      if (typeof sort.get("A") === "boolean") result.ascendingAll = sort.get("A");
-    }
-    const split = col.get("Split");
-    if (split instanceof Dict) result.split = {
-      direction: get(split, "Direction"),
-      position: get(split, "Position")
-    };
-    const colors = col.get("Colors");
-    if (colors instanceof Dict) for (const key of ["Background", "CardBackground", "CardBorder", "PrimaryText", "SecondaryText"]) result.colors.push([key, list(colors.getRaw(key))]);
-    const seenFolders = new Set(),
-      pending = [{
-        raw: col.getRaw("Folders"),
-        parent: null,
-        fallback: "catalog/Collection/Folders"
-      }];
-    while (pending.length) {
-      check();
-      if (steps % 256 === 0) await new Promise(resolve => setTimeout(resolve, 0));
-      const node = pending.pop();
-      if (!node.raw) continue;
-      const folder = fetch(node.raw),
-        id = path(node.raw, node.fallback);
-      if (!(folder instanceof Dict)) {
-        notice(new Error("Invalid portfolio folder."));
-        continue;
-      }
-      if (seenFolders.has(folder)) {
-        notice(new Error("Cyclic or shared portfolio folder."));
-        continue;
-      }
-      seenFolders.add(folder);
-      const declaredParent = folder.getRaw("Parent");
-      if (node.parent && path(declaredParent, "") !== node.parent) notice(new Error("Folder parent reference disagrees with its hierarchy."));
-      const thumb = folder.get("Thumb");
-      if (thumb) thumbnails?.set(id, thumb);
-      result.folders.push({
-        thumbnail: !!thumb,
-        path: id,
-        parent: node.parent,
-        number: get(folder, "ID"),
-        name: get(folder, "Name"),
-        description: get(folder, "Desc"),
-        created: get(folder, "CreationDate"),
-        modified: get(folder, "ModDate"),
-        values: item(folder)
-      });
-      pending.push({
-        raw: folder.getRaw("Next"),
-        parent: node.parent,
-        fallback: id + "/Next"
-      }, {
-        raw: folder.getRaw("Child"),
-        parent: id,
-        fallback: id + "/Child"
-      });
-    }
-    const names = root.get("Names"),
-      seenNames = new Set(),
-      queue = [names instanceof Dict ? names.getRaw("EmbeddedFiles") : null];
-    while (queue.length) {
-      check();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      const node = fetch(queue.pop());
-      if (!node) continue;
-      if (!(node instanceof Dict)) {
-        notice(new Error("Invalid EmbeddedFiles name tree."));
-        continue;
-      }
-      if (seenNames.has(node)) {
-        notice(new Error("Cyclic or shared EmbeddedFiles name tree."));
-        continue;
-      }
-      seenNames.add(node);
-      const pairs = node.get("Names"),
-        kids = node.get("Kids");
-      if (Array.isArray(kids)) {
-        if (kids.length > 200000) throw new Error("Portfolio name-tree limit reached.");
-        for (let k = kids.length - 1; k >= 0; k--) queue.push(kids[k]);
-      }
-      if (!Array.isArray(pairs)) continue;
-      for (let i = 0; i + 1 < pairs.length; i += 2) {
-        check();
-        if (i % 256 === 0) await new Promise(resolve => setTimeout(resolve, 0));
-        try {
-          const spec = fetch(pairs[i + 1]);
-          if (!(spec instanceof Dict) || typeof pairs[i] !== "string") {
-            notice(new Error("Invalid collection member."));
-            continue;
-          }
-          const ef = spec.get("EF");
-          let stream;
-          if (ef instanceof Dict) stream = ef.get("UF") || ef.get("F") || ef.get(ef.getKeys().next().value);
-          const params = stream?.dict?.get("Params");
-          result.entries.push({
-            key: value(pairs[i]),
-            keyHex: hex(pairs[i]),
-            filePath: path(pairs[i + 1], ""),
-            name: get(spec, "UF") || get(spec, "F"),
-            description: get(spec, "Desc"),
-            created: get(params, "CreationDate"),
-            modified: get(params, "ModDate"),
-            size: get(params, "Size"),
-            compressedSize: get(stream?.dict, "Length"),
-            values: item(spec)
-          });
-        } catch (error) {
-          notice(error);
-        }
-      }
-    }
-  } catch (error) {
-    notice(error);
-  }
-  return {
-    files: [],
-    diagnostics: [],
-    presentation: result
-  };
-}
 ;// ./src/core/document_assets.js
-
-
-
 
 
 
@@ -39429,7 +39130,7 @@ const CEILINGS = Object.freeze({
   maxObjects: 1000000,
   maxDepth: 64,
   maxFiles: 16384,
-  maxMetadataBytes: 134217728,
+  maxMetadataBytes: 16777216,
   maxStreamBytes: 16777216
 });
 const locator = (raw, path) => ({
@@ -39467,7 +39168,7 @@ function scalar(value) {
     kind: "unsupported"
   };
 }
-function boundedBytes(stream, maximum, allowLargerBuffer = false) {
+function boundedBytes(stream, maximum) {
   if (!(stream instanceof BaseStream)) throw new Error("Not an embedded stream");
   if (failedDecoders.has(stream)) throw new Error("Previous decode failed; reopen the document to retry");
   const filter = stream.dict?.get("Filter");
@@ -39484,7 +39185,7 @@ function boundedBytes(stream, maximum, allowLargerBuffer = false) {
     seen.add(current);
     if (current instanceof DecodeStream) {
       limits.push([current, current.maxBufferLength]);
-      current.maxBufferLength = allowLargerBuffer ? maximum + 1 : Math.min(current.maxBufferLength, maximum + 1);
+      current.maxBufferLength = Math.min(current.maxBufferLength, maximum + 1);
     }
     current = current.str || current.stream;
   }
@@ -39519,26 +39220,10 @@ class DocumentAssets {
   constructor(catalog, root) {
     this.catalog = catalog;
     this.root = root;
-    this.metadataStreams = new Map();
     this.registered = new Map();
+    this.metadataStreams = new Map();
   }
   async inspect(options = {}) {
-    if (options.presentationOnly === true) {
-      this.collectionThumbnails = new Map();
-      return collectionPresentation(this.root, this.catalog.xref, this.collectionThumbnails);
-    }
-    if (typeof options.folderThumbnail === "string") {
-      if (!this.collectionThumbnails) {
-        this.collectionThumbnails = new Map();
-        await collectionPresentation(this.root, this.catalog.xref, this.collectionThumbnails);
-      }
-      const thumbnail = this.collectionThumbnails.get(options.folderThumbnail);
-      if (!thumbnail) throw new Error("Folder thumbnail was not discovered.");
-      return {
-        files: [],
-        thumbnail: await folderThumbnail(thumbnail, this.catalog.xref)
-      };
-    }
     const limits = {};
     for (const [key, ceiling] of Object.entries(CEILINGS)) {
       const value = options[key] ?? ceiling;
@@ -39548,7 +39233,7 @@ class DocumentAssets {
     const files = new Map(),
       metadata = new Map(),
       diagnostics = [],
-      visitedObjects = new WeakSet();
+      visited = new Set();
     const fetch = raw => raw instanceof Ref ? this.catalog.xref.fetch(raw) : raw;
     const report = (code, loc, error) => {
       if (error instanceof MissingDataException) throw error;
@@ -39592,8 +39277,7 @@ class DocumentAssets {
                 declaredChecksum: scalar(params instanceof Dict ? params.get("CheckSum") : undefined)
               });
               if (valid) this.registered.set(loc.path + "|" + sloc.path, {
-                ref: rawStream instanceof Ref ? rawStream : null,
-                stream: rawStream instanceof Ref ? null : stream,
+                stream,
                 file: spec
               });else report("INVALID_EMBEDDED_STREAM", sloc);
             }
@@ -39656,25 +39340,22 @@ class DocumentAssets {
       }
     };
     if (names instanceof Dict && names.has("EmbeddedFiles")) nameTree(names.getRaw("EmbeddedFiles"), "catalog/Names/EmbeddedFiles", 0);
-    const pending = [[this.root, "catalog", 0]];
-    const scheduledRefs = new Set(),
-      scheduledObjects = new WeakSet([this.root]);
-    const scheduled = {
-      has: key => typeof key === "object" ? scheduledObjects.has(key) : scheduledRefs.has(key),
-      add: key => typeof key === "object" ? scheduledObjects.add(key) : scheduledRefs.add(key)
-    };
-    const identity = raw => raw instanceof Ref ? raw.gen === 0 ? raw.num : raw.toString() : raw;
+    const pending = [[this.root, "catalog", 0]],
+      scheduled = new Set([this.root]);
+    const identity = raw => raw instanceof Ref ? raw.toString() : raw;
     let totalMetadata = 0,
-      visitsSinceYield = 0;
-    while (pending.length) {
-      if (++visitsSinceYield % 512 === 0) await yieldInspection();
-      const [raw, path, depth] = pending.pop(),
+      next = 0,
+      edges = 0;
+    while (next < pending.length) {
+      const [raw, path, depth] = pending[next++],
         loc = locator(raw, path);
       try {
-        const obj = fetch(raw);
-        if (!(obj instanceof Dict || obj instanceof BaseStream || Array.isArray(obj)) || visitedObjects.has(obj)) continue;
+        const obj = fetch(raw),
+          key = raw instanceof Ref ? loc.path : obj;
+        if (!(obj instanceof Dict || obj instanceof BaseStream || Array.isArray(obj)) || visited.has(key) || visited.has(obj)) continue;
         if (!step(loc, depth)) continue;
-        visitedObjects.add(obj);
+        visited.add(key);
+        visited.add(obj);
         const dict = obj instanceof BaseStream ? obj.dict : obj;
         if (dict instanceof Dict) {
           const af = dict.get("AF");
@@ -39709,11 +39390,8 @@ class DocumentAssets {
               };
               metadata.set(mloc.path, item);
               this.metadataStreams.set(mloc.path, rawMeta);
-              let metadataStream;
               try {
-                if (DecodeStream.remainingBudget < limits.maxMetadataBytes + 1) this.catalog.xref.clearObjectStreamCache?.();
-                metadataStream = fetch(rawMeta);
-                const data = boundedBytes(metadataStream, Math.max(0, Math.min(limits.maxMetadataBytes, limits.maxMetadataBytes * 4 - totalMetadata)), true);
+                const data = boundedBytes(fetch(rawMeta), Math.max(0, Math.min(limits.maxMetadataBytes, limits.maxMetadataBytes * 4 - totalMetadata)));
                 totalMetadata += data.length;
                 const encoding = data[0] === 255 && data[1] === 254 ? "utf-16le" : data[0] === 254 && data[1] === 255 ? "utf-16be" : "utf-8";
                 item.text = new TextDecoder(encoding, {
@@ -39722,24 +39400,20 @@ class DocumentAssets {
                 item.state = "present";
               } catch (error) {
                 report("METADATA_UNAVAILABLE", mloc, error);
-              } finally {
-                if (rawMeta instanceof Ref) discardStructuralStream(metadataStream);
               }
             }
             metadata.get(mloc.path).owners.push(loc);
           }
         }
         const children = Array.isArray(obj) ? obj.entries() : dict.getRawEntries();
-        const nextChildren = [];
         for (const [key_, child] of children) {
           if (child instanceof Ref || child instanceof Dict || child instanceof BaseStream || Array.isArray(child)) {
             const key = identity(child);
-            if (scheduled.has(key) || visitedObjects.has(child)) continue;
+            if (scheduled.has(key) || visited.has(child)) continue;
             scheduled.add(key);
-            nextChildren.push([child, child instanceof Ref ? "" : loc.path + (Array.isArray(obj) ? `[${key_}]` : "/" + key_), depth + (dict instanceof Dict && dict.has("Title") && dict.has("Parent") && (key_ === "Next" || key_ === "Prev") ? 0 : 1)]);
+            pending.push([child, loc.path + (Array.isArray(obj) ? `[${key_}]` : "/" + key_), depth + (dict instanceof Dict && dict.has("Title") && dict.has("Parent") && (key_ === "Next" || key_ === "Prev") ? 0 : 1)]);
           }
         }
-        for (let i = nextChildren.length - 1; i >= 0; i--) pending.push(nextChildren[i]);
       } catch (error) {
         report("OBJECT_UNAVAILABLE", loc, error);
       }
@@ -39819,29 +39493,15 @@ class DocumentAssets {
       if (typeof metadataId !== "string" || !this.metadataStreams.has(metadataId)) throw new Error("Metadata stream was not discovered in this document");
       const raw = this.metadataStreams.get(metadataId);
       const stream = raw instanceof Ref ? this.catalog.xref.fetch(raw) : raw;
-      try {
-        return boundedBytes(stream, maxBytes);
-      } finally {
-        if (raw instanceof Ref) discardStructuralStream(stream);
-      }
+      return boundedBytes(stream, maxBytes);
     }
     const registered = this.registered.get(fileId + "|" + streamId);
     if (!registered) throw new Error("Stream is not a discovered EF target of this file");
-    if (!registered.ref) return boundedBytes(registered.stream, maxBytes);
-    if (DecodeStream.remainingBudget < Math.min(maxBytes + 1, 64 * 1024 ** 2)) {
-      this.catalog.xref.clearObjectStreamCache?.();
-    }
-    const stream = this.catalog.xref.fetch(registered.ref);
-    try {
-      return boundedBytes(stream, maxBytes);
-    } finally {
-      discardStructuralStream(stream);
-    }
+    return boundedBytes(registered.stream, maxBytes);
   }
 }
 
 ;// ./src/core/document_parts.js
-
 
 
 
@@ -39961,7 +39621,6 @@ async function getDocumentParts(catalog, root, documentId) {
     kind: raw === undefined ? "missing" : raw instanceof Ref ? "reference" : "invalid",
     ref: ref(raw)
   });
-  let allPageIndices;
   async function pageIndex(raw) {
     if (!(raw instanceof Ref)) {
       throw new Error("Expected a page reference");
@@ -39969,20 +39628,6 @@ async function getDocumentParts(catalog, root, documentId) {
     const key = raw.toString();
     if (pageIndices.has(key)) {
       return pageIndices.get(key);
-    }
-    if (typeof catalog.getAllPageDicts === "function") {
-      if (!allPageIndices) {
-        allPageIndices = new Map();
-        for (const [index, [page, reference]] of await catalog.getAllPageDicts()) {
-          if (page instanceof Dict && reference instanceof Ref && Number.isInteger(index) && index >= 0 && index < catalog.numPages) {
-            allPageIndices.set(reference.toString(), index);
-          }
-        }
-      }
-      if (!allPageIndices.has(key)) {
-        throw new Error("Page reference is outside the document page tree");
-      }
-      return allPageIndices.get(key);
     }
     const index = await catalog.getPageIndex(raw);
     if (!Number.isInteger(index) || index < 0 || index >= catalog.numPages) {
@@ -39995,9 +39640,7 @@ async function getDocumentParts(catalog, root, documentId) {
     pageIndices.set(key, index);
     return index;
   }
-  let workSinceYield = 0;
   async function walk(raw, parent, path, depth, expectedParent) {
-    if (++workSinceYield % 256 === 0) await yieldInspection();
     if (stopped) {
       return;
     }
@@ -41765,7 +41408,6 @@ class StructTreePage {
 
 
 
-
 const isRef = v => v instanceof Ref;
 const isValidExplicitDest = _isValidExplicitDest.bind(null, isRef, isName);
 function fetchDest(dest) {
@@ -41844,22 +41486,14 @@ class Catalog {
     }
     this._documentAssets ??= new DocumentAssets(this, this.#catDict);
     const result = await this._documentAssets.inspect(options);
-    let pageIndices;
     for (const file of result.files) {
       for (const origin of file.origins) {
         if (!origin.pageRef) continue;
         try {
           const pageRef = Ref.get(origin.pageRef.num, origin.pageRef.gen);
-          if (!pageIndices) {
-            pageIndices = new Map();
-            for (const [index, [page, reference]] of await this.getAllPageDicts()) {
-              if (page instanceof Dict && reference instanceof Ref) {
-                pageIndices.set(reference.toString(), index);
-              }
-            }
-          }
-          const index = pageIndices.get(pageRef.toString());
-          if (index === undefined) throw new Error("Detached page");
+          const index = await this.getPageIndex(pageRef);
+          const [, actual] = await this.getPageDict(index);
+          if (!isRefsEqual(actual, pageRef)) throw new Error("Detached page");
           origin.pageIndex = index;
         } catch (error) {
           if (error instanceof MissingDataException) throw error;
@@ -42776,7 +42410,6 @@ class Catalog {
     return shadow(this, "jsActions", actions);
   }
   async cleanup(manuallyTriggered = false) {
-    this.xref.clearObjectStreamCache();
     clearGlobalCaches();
     this.globalColorSpaceCache.clear();
     this.globalImageCache.clear(manuallyTriggered);
@@ -42921,9 +42554,7 @@ class Catalog {
       }
       map.set(pageIndex++, [error, null]);
     }
-    let workSinceYield = 0;
     while (queue.length > 0) {
-      if (++workSinceYield % 1024 === 0) await yieldInspection();
       const queueItem = queue.at(-1);
       const {
         currentNode,
@@ -59705,115 +59336,9 @@ class CipherTransformFactory {
 
 
 
-
-class CompactXRefEntries {
-  #pages = new Map();
-  #other = new Map();
-  length = 0;
-  has(index) {
-    if (this.#other.has(index)) return true;
-    const page = this.#pages.get(Math.floor(index / 4096));
-    return !!page?.flags[index % 4096];
-  }
-  get(index) {
-    if (this.#other.has(index)) return this.#other.get(index);
-    const page = this.#pages.get(Math.floor(index / 4096)),
-      slot = index % 4096;
-    if (!page?.flags[slot]) return undefined;
-    const flags = page.flags[slot];
-    return {
-      offset: page.offsets[slot],
-      gen: page.generations[slot],
-      free: !!(flags & 1),
-      uncompressed: !!(flags & 2)
-    };
-  }
-  set(index, entry) {
-    if (!Number.isInteger(index) || index < 0 || index >= 4294967295) {
-      this.#other.set(index, entry);
-      return;
-    }
-    const key = Math.floor(index / 4096),
-      slot = index % 4096;
-    let page = this.#pages.get(key);
-    if (!page) {
-      page = {
-        offsets: new Float64Array(4096),
-        generations: new Float64Array(4096),
-        flags: new Uint8Array(4096)
-      };
-      this.#pages.set(key, page);
-    }
-    page.offsets[slot] = entry.offset;
-    page.generations[slot] = entry.gen;
-    page.flags[slot] = 4 | (entry.free ? 1 : 0) | (entry.uncompressed ? 2 : 0);
-    this.length = Math.max(this.length, index + 1);
-  }
-  clear() {
-    this.#pages.clear();
-    this.#other.clear();
-    this.length = 0;
-  }
-  *keys() {
-    for (const key of [...this.#pages.keys()].sort((a, b) => a - b)) {
-      const page = this.#pages.get(key);
-      for (let slot = 0; slot < 4096; slot++) if (page.flags[slot]) yield key * 4096 + slot;
-    }
-    yield* this.#other.keys();
-  }
-}
 class XRef {
   #cacheMap = new Map();
-  #parsedCacheKeys = new Set();
-  #parsedCacheOrder = new Array(100000);
-  #parsedCacheNext = 0;
-  #liveObjects = new Map();
-  #releasedObjects = new FinalizationRegistry(({
-    num,
-    reference
-  }) => {
-    if (this.#liveObjects.get(num) === reference) this.#liveObjects.delete(num);
-  });
-  #cacheParsed(num, object) {
-    this.#cacheMap.set(num, object);
-    if (this.#parsedCacheKeys.has(num)) return;
-    if (this.#parsedCacheKeys.size === 100000) {
-      const oldest = this.#parsedCacheOrder[this.#parsedCacheNext];
-      this.#parsedCacheKeys.delete(oldest);
-      this.#cacheMap.delete(oldest);
-    }
-    this.#parsedCacheOrder[this.#parsedCacheNext] = num;
-    this.#parsedCacheNext = (this.#parsedCacheNext + 1) % 100000;
-    this.#parsedCacheKeys.add(num);
-  }
-  #rememberObject(num, object) {
-    if (object && typeof object === "object" && !(object instanceof BaseStream) && this.#liveObjects.get(num)?.deref() !== object) {
-      const reference = new WeakRef(object);
-      this.#liveObjects.set(num, reference);
-      this.#releasedObjects.register(object, {
-        num,
-        reference
-      });
-    }
-    return object;
-  }
-  #entries = new CompactXRefEntries();
-  #objectStreams = new Map();
-  #objectStreamBytes = 0;
-  #dropObjectStream(key, entry) {
-    this.#objectStreams.delete(key);
-    this.#objectStreamBytes -= entry.bytes;
-    if (!entry.retainsBytes) discardStructuralStream(entry.stream);
-  }
-  clearObjectStreamCache() {
-    for (const [key, entry] of this.#objectStreams) this.#dropObjectStream(key, entry);
-  }
-  #trimObjectStreams(reserve = false) {
-    while (this.#objectStreams.size && (this.#objectStreams.size > 1024 || this.#objectStreamBytes > 128 * 1024 * 1024 || reserve && DecodeStream.remainingBudget < 64 * 1024 * 1024)) {
-      const [key, entry] = this.#objectStreams.entries().next().value;
-      this.#dropObjectStream(key, entry);
-    }
-  }
+  #entries = [];
   #newPersistentRefNum = null;
   #newTemporaryRefNum = null;
   #parsedWithRecovery = false;
@@ -59982,7 +59507,7 @@ class XRef {
         if (i === 0 && entry.free && first === 1) {
           first = 0;
         }
-        if (!this.#entries.has(first + i)) this.#entries.set(first + i, entry);
+        this.#entries[first + i] ??= entry;
       }
       tableState.entryNum = 0;
       tableState.streamPos = stream.pos;
@@ -59991,7 +59516,7 @@ class XRef {
       delete tableState.firstEntryNum;
       delete tableState.entryCount;
     }
-    if (this.#entries.get(0) && !this.#entries.get(0).free) {
+    if (this.#entries[0] && !this.#entries[0].free) {
       throw new FormatError("Invalid XRef table: unexpected first object");
     }
     return obj;
@@ -60004,18 +59529,6 @@ class XRef {
       } = stream;
       const byteWidths = dict.get("W");
       const range = dict.get("Index") || [0, dict.get("Size")];
-      if (Array.isArray(byteWidths) && byteWidths.length === 3 && byteWidths.every(w => Number.isSafeInteger(w) && w >= 0) && Array.isArray(range) && range.length % 2 === 0 && range.every(n => Number.isSafeInteger(n) && n >= 0)) {
-        const width = byteWidths.reduce((a, b) => a + b, 0);
-        const count = range.reduce((sum, n, i) => sum + (i % 2 ? n : 0), 0);
-        const needed = width * count + 65536;
-        if (width > 0 && Number.isSafeInteger(needed)) {
-          const seen = new Set();
-          for (let decoder = stream; decoder instanceof DecodeStream && !seen.has(decoder); decoder = decoder.str) {
-            seen.add(decoder);
-            decoder.maxBufferLength = Math.max(decoder.maxBufferLength, Math.min(needed, DecodeStream.remainingBudget + decoder.buffer.byteLength));
-          }
-        }
-      }
       this.streamState = {
         entryRanges: range,
         byteWidths,
@@ -60025,24 +59538,20 @@ class XRef {
     }
     this.readXRefStream(stream);
     delete this.streamState;
-    discardStructuralStream(stream);
     return stream.dict;
   }
   readXRefStream(stream) {
     const streamState = this.streamState;
     stream.pos = streamState.streamPos;
     const [typeFieldWidth, offsetFieldWidth, generationFieldWidth] = streamState.byteWidths;
-    if (![typeFieldWidth, offsetFieldWidth, generationFieldWidth].every(width => Number.isInteger(width) && width >= 0)) {
-      throw new FormatError(`Invalid XRef entry fields length: ${streamState.byteWidths}`);
-    }
-    if (typeFieldWidth + offsetFieldWidth + generationFieldWidth === 0) {
-      return;
-    }
     const entryRanges = streamState.entryRanges;
     while (entryRanges.length > 0) {
       const [first, n] = entryRanges;
       if (!Number.isInteger(first) || !Number.isInteger(n)) {
         throw new FormatError(`Invalid XRef range fields: ${first}, ${n}`);
+      }
+      if (![typeFieldWidth, offsetFieldWidth, generationFieldWidth].every(width => Number.isInteger(width) && width >= 0) || typeFieldWidth + offsetFieldWidth + generationFieldWidth === 0) {
+        throw new FormatError(`Invalid XRef entry fields length: ${first}, ${n}`);
       }
       for (let i = streamState.entryNum; i < n; ++i) {
         streamState.entryNum = i;
@@ -60092,7 +59601,7 @@ class XRef {
           default:
             throw new FormatError(`Invalid XRef entry type: ${type}`);
         }
-        if (!this.#entries.has(first + i)) this.#entries.set(first + i, entry);
+        this.#entries[first + i] ??= entry;
       }
       streamState.entryNum = 0;
       streamState.streamPos = stream.pos;
@@ -60141,13 +59650,8 @@ class XRef {
     const trailerBytes = new Uint8Array([116, 114, 97, 105, 108, 101, 114]);
     const startxrefBytes = new Uint8Array([115, 116, 97, 114, 116, 120, 114, 101, 102]);
     const xrefBytes = new Uint8Array([47, 88, 82, 101, 102]);
-    this.clearObjectStreamCache();
-    this.#entries.clear();
+    this.#entries.length = 0;
     this.#cacheMap.clear();
-    this.#parsedCacheKeys.clear();
-    this.#parsedCacheOrder.fill(undefined);
-    this.#parsedCacheNext = 0;
-    this.#liveObjects.clear();
     const stream = this.stream;
     stream.pos = 0;
     const buffer = stream.getBytes(),
@@ -60184,9 +59688,9 @@ class XRef {
         const startPos = position + token.length;
         let contentLength,
           updateEntries = false;
-        if (!this.#entries.get(num)) {
+        if (!this.#entries[num]) {
           updateEntries = true;
-        } else if (this.#entries.get(num).gen === gen) {
+        } else if (this.#entries[num].gen === gen) {
           try {
             const parser = new Parser({
               lexer: new Lexer(stream.makeSubStream(startPos))
@@ -60202,12 +59706,12 @@ class XRef {
           }
         }
         if (updateEntries) {
-          this.#entries.set(num, {
+          this.#entries[num] = {
             offset: position - stream.start,
             gen,
             free: false,
             uncompressed: true
-          });
+          };
         }
         gEndobjRegExp.lastIndex = startPos;
         const match = gEndobjRegExp.exec(bufferStr);
@@ -60315,8 +59819,8 @@ class XRef {
       return this.topDict;
     }
     if (!trailerDicts.length) {
-      for (const num of this.#entries.keys()) {
-        const entry = this.#entries.get(num);
+      for (const num in this.#entries) {
+        const entry = this.#entries[num];
         if (!entry) {
           continue;
         }
@@ -60385,7 +59889,7 @@ class XRef {
           this.startXRefQueue.push(obj.num);
         }
       } catch (e) {
-        if (e instanceof MissingDataException || e instanceof DecodeStreamLimitError) {
+        if (e instanceof MissingDataException) {
           throw e;
         }
         delete this._tableState;
@@ -60417,7 +59921,7 @@ class XRef {
     return count;
   }
   getEntry(i) {
-    const entry = this.#entries.get(i);
+    const entry = this.#entries[i];
     return entry && !entry.free && entry.offset ? entry : null;
   }
   fetchIfRef(obj, suppressEncryption = false) {
@@ -60428,17 +59932,16 @@ class XRef {
       throw new Error("ref object is not a reference");
     }
     const num = ref.num;
-    const strongEntry = this.#cacheMap.get(num);
-    const cacheEntry = strongEntry !== undefined ? strongEntry : this.#liveObjects.get(num)?.deref();
+    const cacheEntry = this.#cacheMap.get(num);
     if (cacheEntry !== undefined) {
       if (cacheEntry instanceof Dict && !cacheEntry.objId) {
         cacheEntry.objId = ref.toString();
       }
-      return this.#rememberObject(num, cacheEntry);
+      return cacheEntry;
     }
     let xrefEntry = this.getEntry(num);
     if (xrefEntry === null) {
-      return this.#rememberObject(num, xrefEntry);
+      return xrefEntry;
     }
     if (this.#pendingRefs.has(ref)) {
       this.#pendingRefs.remove(ref);
@@ -60458,7 +59961,7 @@ class XRef {
     } else if (xrefEntry instanceof BaseStream) {
       xrefEntry.dict.objId = ref.toString();
     }
-    return this.#rememberObject(num, xrefEntry);
+    return xrefEntry;
   }
   fetchUncompressed(ref, xrefEntry, suppressEncryption = false) {
     const gen = ref.gen;
@@ -60494,112 +59997,72 @@ class XRef {
     }
     xrefEntry = this.encrypt && !suppressEncryption ? parser.getObj(this.encrypt.createCipherTransform(num, gen)) : parser.getObj();
     if (!(xrefEntry instanceof BaseStream)) {
-      this.#cacheParsed(num, xrefEntry);
+      this.#cacheMap.set(num, xrefEntry);
     }
     return xrefEntry;
   }
   fetchCompressed(ref, xrefEntry, suppressEncryption = false) {
     const tableOffset = xrefEntry.offset;
-    let cached = this.#objectStreams.get(tableOffset);
-    if (!cached) {
-      this.#trimObjectStreams(true);
-      const stream = this.fetch(Ref.get(tableOffset, 0));
-      if (!(stream instanceof BaseStream)) throw new FormatError("bad ObjStm stream");
-      try {
-        const first = stream.dict.get("First"),
-          n = stream.dict.get("N");
-        if (!Number.isInteger(first) || first < 0 || !Number.isInteger(n) || n < 0) {
-          throw new FormatError("invalid first and n parameters for ObjStm stream");
-        }
-        const parser = new Parser({
-          lexer: new Lexer(stream),
-          xref: this,
-          allowStreams: true
-        });
-        const nums = new Array(n),
-          offsets = new Array(n);
-        for (let i = 0; i < n; i++) {
-          const num = parser.getObj(),
-            offset = parser.getObj();
-          if (!Number.isInteger(num) || !Number.isInteger(offset) || offset < 0 || i > 0 && offset < offsets[i - 1]) throw new FormatError("Invalid object stream header.");
-          nums[i] = num;
-          offsets[i] = offset;
-          const entry = this.getEntry(num);
-          if (entry?.offset === tableOffset && entry.gen !== i) {
-            entry.gen = i;
-            this.#entries.set(num, entry);
-            if (num === ref.num) xrefEntry.gen = i;
-          }
-        }
-        stream.getBytes();
-        let bytes = 0;
-        const seen = new Set();
-        for (let decoder = stream; decoder instanceof DecodeStream && !seen.has(decoder); decoder = decoder.str) {
-          seen.add(decoder);
-          bytes += decoder.buffer.byteLength;
-        }
-        cached = {
-          stream,
-          nums,
-          offsets,
-          start: (stream.start || 0) + first,
-          bytes,
-          retainsBytes: false
-        };
-        this.#objectStreams.set(tableOffset, cached);
-        this.#objectStreamBytes += bytes;
-      } catch (error) {
-        discardStructuralStream(stream);
-        throw error;
+    const stream = this.fetch(Ref.get(tableOffset, 0));
+    if (!(stream instanceof BaseStream)) {
+      throw new FormatError("bad ObjStm stream");
+    }
+    const first = stream.dict.get("First");
+    const n = stream.dict.get("N");
+    if (!Number.isInteger(first) || !Number.isInteger(n)) {
+      throw new FormatError("invalid first and n parameters for ObjStm stream");
+    }
+    let parser = new Parser({
+      lexer: new Lexer(stream),
+      xref: this,
+      allowStreams: true
+    });
+    const nums = new Array(n);
+    const offsets = new Array(n);
+    for (let i = 0; i < n; ++i) {
+      const num = parser.getObj();
+      if (!Number.isInteger(num)) {
+        throw new FormatError(`invalid object number in the ObjStm stream: ${num}`);
       }
-    } else {
-      this.#objectStreams.delete(tableOffset);
-      this.#objectStreams.set(tableOffset, cached);
+      const offset = parser.getObj();
+      if (!Number.isInteger(offset)) {
+        throw new FormatError(`invalid object offset in the ObjStm stream: ${offset}`);
+      }
+      nums[i] = num;
+      const entry = this.getEntry(num);
+      if (entry?.offset === tableOffset && entry.gen !== i) {
+        entry.gen = i;
+      }
+      offsets[i] = offset;
     }
-    const {
-        stream,
-        nums,
-        offsets,
-        start
-      } = cached,
-      index = xrefEntry.gen;
-    if (!Number.isInteger(index) || index < 0 || index >= offsets.length) {
-      throw new XRefEntryException(`Bad (compressed) XRef entry: ${ref}`);
-    }
-    const length = index + 1 < offsets.length ? offsets[index + 1] - offsets[index] : undefined;
-    let object;
-    try {
-      const parser = new Parser({
-        lexer: new Lexer(stream.makeSubStream(start + offsets[index], length, stream.dict)),
+    const start = (stream.start || 0) + first;
+    const entries = new Array(n);
+    for (let i = 0; i < n; ++i) {
+      const length = i < n - 1 ? offsets[i + 1] - offsets[i] : undefined;
+      if (length < 0) {
+        throw new FormatError("Invalid offset in the ObjStm stream.");
+      }
+      parser = new Parser({
+        lexer: new Lexer(stream.makeSubStream(start + offsets[i], length, stream.dict)),
         xref: this,
         allowStreams: true
       });
-      object = parser.getObj();
-      if (object === undefined) throw new XRefEntryException(`Bad (compressed) XRef entry: ${ref}`);
-      const pending = [object],
-        seen = new Set();
-      while (pending.length && !cached.retainsBytes) {
-        const value = pending.pop();
-        if (value instanceof BaseStream) {
-          cached.retainsBytes = true;
-          break;
-        }
-        if (seen.has(value)) continue;
-        if (Array.isArray(value)) {
-          seen.add(value);
-          for (const child of value) pending.push(child);
-        } else if (value instanceof Dict) {
-          seen.add(value);
-          for (const [, child] of value.getRawEntries()) pending.push(child);
-        }
+      const obj = parser.getObj();
+      entries[i] = obj;
+      if (obj instanceof BaseStream) {
+        continue;
       }
-      const num = nums[index],
-        entry = this.#entries.get(num);
-      if (!(object instanceof BaseStream) && entry?.offset === tableOffset && entry.gen === index) this.#cacheParsed(num, object);
-      return object;
-    } finally {
-      this.#trimObjectStreams();
+      const num = nums[i],
+        entry = this.#entries[num];
+      if (entry && entry.offset === tableOffset && entry.gen === i) {
+        this.#cacheMap.set(num, obj);
+      }
     }
+    xrefEntry = entries[xrefEntry.gen];
+    if (xrefEntry === undefined) {
+      throw new XRefEntryException(`Bad (compressed) XRef entry: ${ref}`);
+    }
+    return xrefEntry;
   }
   async fetchIfRefAsync(obj, suppressEncryption) {
     return obj instanceof Ref ? this.fetchAsync(obj, suppressEncryption) : obj;

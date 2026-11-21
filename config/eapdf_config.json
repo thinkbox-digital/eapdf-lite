@@ -6,24 +6,5 @@
     "pkcs12Path": "",
     "alias": "",
     "reason": ""
-  },
-  "searchIndex": {
-    "enabled": true,
-    "fullTextEnabled": true
-  },
-  "accessibility": {
-    "addPdfUaFeatures": true,
-    "markInfoMarked": true,
-    "language": "en",
-    "readingDirection": "L2R",
-    "pageLabels": {
-      "enabled": true,
-      "singleMessage": false,
-      "archiveAndCollection": true,
-      "frontMatterPrefix": "Index-"
-    },
-    "experimental": {
-      "altTextGeneratedImages": false
-    }
   }
 }

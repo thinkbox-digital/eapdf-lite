@@ -1,18 +1,15 @@
 package eapdf;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
 public class EmailToPDFA {
-  static final byte[] OLE2_SIGNATURE = new byte[] {
-      (byte)0xD0, (byte)0xCF, 0x11, (byte)0xE0, (byte)0xA1, (byte)0xB1, 0x1A, (byte)0xE1
-  };
-
   public static void main(String[] args) throws Exception {
+    if (args.length == 0) {
+      printHowTo();
+      return;
+    }
     if (ConversionSupervisor.run(EmailToPDFA.class, args)) return;
     try (Common.JobReport job = Common.beginJob()) {
       Map<String,Object> opt = parseArgs(args);
@@ -52,6 +49,37 @@ public class EmailToPDFA {
     } catch (Common.UserFacingException e) {
       Common.exitWithError(e.getMessage());
     }
+  }
+
+  private static void printHowTo() {
+    String command = "java -jar emailtopdfa-lite-" + Common.projectVersion() + ".jar";
+    System.out.print("""
+        EA-PDF Lite Creator (Java 21)
+        Convert a local .eml file or a folder of .eml files to EA-PDF.
+
+        Usage: %1$s [options] <file.eml or folder>
+        Quote file or folder paths that contain spaces.
+
+        Convert one message:
+          %1$s --out /tmp/eapdf-lite-output "message.eml"
+
+        Combine a folder of messages into one EA-PDF collection:
+          %1$s --out /tmp/eapdf-lite-output --archive-profile c "email-folder"
+
+        Options:
+          --out <folder>               Output folder (default: out)
+          --jobs, -j <count>           Maximum parallel conversion workers (default: 1)
+          --omit-source                Create isolated single-message PDFs (1si instead of 1s)
+          --archive-profile <profile>  Combine messages as a continuous PDF (m, mi)
+                                       or a collection (c, ci). Use mi or ci for isolated output.
+          --archive-output <pdf>       Set the archive PDF path (requires --archive-profile)
+          --global-id, -g <id>         Set the global archive identifier
+          --email, -e <address>        Add an archive-owner email address (repeatable)
+          --font <file.ttf>            Select a custom font
+          --icc <file.icc>             Select a custom ICC color profile
+          --debug                      Write debug files
+          --debug-dir <folder>         Folder for --debug files (default: _debug inside the output folder)
+        """.formatted(command));
   }
 
   static Map<String,Object> parseArgs(String[] args) {
@@ -109,11 +137,6 @@ public class EmailToPDFA {
           System.out.println("skipped input: " + candidate + " (unsupported extension)");
           continue;
         }
-        if (!shouldCollectInput(file)) {
-          Common.inputState(candidate, "skipped");
-          System.out.println("skipped input: " + candidate + " (not an Outlook MSG or RFC 822 email)");
-          continue;
-        }
         out.add(candidate);
         Common.inputState(candidate, "accepted");
       }
@@ -125,18 +148,7 @@ public class EmailToPDFA {
 
   static boolean isSupportedInput(String path) {
     String p = path.toLowerCase(Locale.ROOT);
-    return p.endsWith(".pst") || p.endsWith(".msg") || p.endsWith(".eml") || p.endsWith(".mbox");
-  }
-
-  static boolean shouldCollectInput(Path path) {
-    String p = path.toString().toLowerCase(Locale.ROOT);
-    if (!p.endsWith(".msg")) return true;
-    try {
-      String kind = detectMsgInputKind(path);
-      return "application/vnd.ms-outlook".equals(kind) || "message/rfc822".equals(kind);
-    } catch (IOException ignored) {
-      return true;
-    }
+    return p.endsWith(".eml");
   }
 
   static void runSequential(List<String> inputs, String outDir, String fontPath, String iccPath, String globalId,
@@ -171,7 +183,6 @@ public class EmailToPDFA {
       Path base = inputRoot.toAbsolutePath().normalize();
       for (EmailRecord record : all) {
         if (!Common.nz(record.folderPath).isBlank() || !record.folderMemberships.isEmpty()) continue;
-        if (!"eml".equals(record.sourceType) && !"msg".equals(record.sourceType)) continue;
         Path parent = Paths.get(record.sourcePath).toAbsolutePath().normalize().getParent();
         if (parent == null || !parent.startsWith(base)) continue;
         String folder = base.relativize(parent).toString().replace(java.io.File.separatorChar, '/');
@@ -246,11 +257,6 @@ public class EmailToPDFA {
     try {
       for (String input : inputs) {
         if (futures.size() >= workers) awaitConversion(futures.removeFirst());
-        if (input.toLowerCase(Locale.ROOT).endsWith(".pst")) {
-          while (!futures.isEmpty()) awaitConversion(futures.removeFirst());
-          processInput(input, outDir, fontPath, iccPath, globalId, archiveEmails, debug, debugDir, seq, multiInput, omitSource);
-          continue;
-        }
         Common.inputState(input, "started");
         List<EmailRecord> records = readAny(input, globalId, archiveEmails, debug);
         AtomicInteger inputSequence = new AtomicInteger(seq.getAndAdd(records.size()));
@@ -282,64 +288,15 @@ public class EmailToPDFA {
                            List<String> archiveEmails, boolean debug, String debugDir, AtomicInteger seq,
                            boolean multiInput, boolean omitSource) throws Exception {
     Common.inputState(input, "started");
-    if (input.toLowerCase(Locale.ROOT).endsWith(".pst")) {
-      processPst(input, outDir, fontPath, iccPath, globalId, archiveEmails, debug, debugDir, seq, multiInput, omitSource);
-      Common.inputState(input, "completed");
-      return;
-    }
     List<EmailRecord> recs = readAny(input, globalId, archiveEmails, debug);
     processRecords(input, recs, outDir, fontPath, iccPath, debug, debugDir, seq, multiInput, omitSource);
     Common.inputState(input, "completed");
-  }
-
-  static void processPst(String input, String outDir, String fontPath, String iccPath, String globalId,
-                         List<String> archiveEmails, boolean debug, String debugDir, AtomicInteger seq,
-                         boolean multiInput, boolean omitSource) throws Exception {
-    if (PstProcesses.convert(input, outDir, fontPath, iccPath, globalId, archiveEmails, debug, debugDir, seq, multiInput, omitSource)) return;
-    int workers = PdfMailWriter.renderParallelism(Integer.MAX_VALUE);
-    ExecutorService pool = Common.newWorkers(workers);
-    Deque<Future<?>> pending = new ArrayDeque<>();
-    int[] count = {0};
-    Common.JobReport job = Common.ACTIVE_JOB.get();
-    try {
-      PstReader.forEach(input, globalId, archiveEmails, debug, record -> {
-        if (pending.size() >= workers) awaitConversion(pending.removeFirst());
-        int localIndex = ++count[0], globalIndex = seq.incrementAndGet();
-        pending.addLast(pool.submit(() -> {
-          try {
-            withRecordRelease(
-                () -> processRecord(input, record, outDir, fontPath, iccPath, debug, debugDir, localIndex, globalIndex, multiInput, omitSource),
-                () -> { if (job != null) job.release(record); });
-          } catch (Exception error) { throw new CompletionException(error); }
-        }));
-      });
-      ConversionProgress.inputRead();
-      while (!pending.isEmpty()) awaitConversion(pending.removeFirst());
-      if (count[0] == 0) throw Common.fail("no messages found in input: " + input);
-      System.out.println("input: " + input + " messages: " + count[0]);
-    } finally { Common.stopWorkers(pool); }
-  }
-
-  @FunctionalInterface
-  interface RecordConversion { void run() throws Exception; }
-
-  /** Release staged data without masking a conversion failure, including Errors. */
-  static void withRecordRelease(RecordConversion conversion, AutoCloseable release) throws Exception {
-    try (release) {
-      conversion.run();
-    }
   }
 
   static void processRecords(String input, List<EmailRecord> recs, String outDir, String fontPath, String iccPath,
                              boolean debug, String debugDir, AtomicInteger seq, boolean multiInput, boolean omitSource) throws Exception {
     if (recs.isEmpty()) throw Common.fail("no messages found in input: " + input);
     System.out.println("input: " + input + " messages: " + recs.size());
-    String inputStem = Common.safeFileStem(Paths.get(input).getFileName().toString().replaceFirst("\\.[^.]+$", ""));
-    if (!multiInput && input.toLowerCase(Locale.ROOT).endsWith(".mbox")
-        && MboxProcesses.convert(input, recs, outDir, fontPath, iccPath, debug, debugDir, omitSource)) {
-      seq.addAndGet(recs.size());
-      return;
-    }
     int localIndex = 0;
     for (EmailRecord r : recs) {
       localIndex++;
@@ -388,18 +345,8 @@ public class EmailToPDFA {
 
   private static List<EmailRecord> readAnyInput(String path, String globalId, List<String> archiveEmails, boolean debug) throws Exception {
     Common.inputState(path, "started");
-    String p = path.toLowerCase(Locale.ROOT);
-    if (p.endsWith(".pst")) return PstReader.readPst(path, globalId, archiveEmails, debug);
-    if (p.endsWith(".msg")) {
-      String kind = detectMsgInputKind(Paths.get(path));
-      if ("application/vnd.ms-outlook".equals(kind)) return List.of(Common.stageRecord(MsgReader.readMsg(path, globalId, archiveEmails, debug)));
-      if ("message/rfc822".equals(kind)) return List.of(Common.stageRecord(EmlReader.readEml(path, globalId, archiveEmails, debug)));
-      throw Common.fail("input has .msg extension but is not a valid Outlook MSG file"
-          + (kind.isBlank() ? "" : " (detected " + kind + ")") + ": " + path);
-    }
-    if (p.endsWith(".eml")) return List.of(Common.stageRecord(EmlReader.readEml(path, globalId, archiveEmails, debug)));
-    if (p.endsWith(".mbox")) return MboxReader.readMbox(path, globalId, archiveEmails, debug);
-    throw Common.fail("unsupported input (expected .pst .msg .eml .mbox): " + path);
+    if (!isSupportedInput(path)) throw Common.fail("unsupported input (expected .eml): " + path);
+    return List.of(Common.stageRecord(EmlReader.readEml(path, globalId, archiveEmails, debug)));
   }
 
   static void rethrowTaskFailure(ExecutionException e) throws Exception {
@@ -411,38 +358,5 @@ public class EmailToPDFA {
     if (cause instanceof Exception ex) throw ex;
     if (cause instanceof Error err) throw err;
     throw new RuntimeException(cause);
-  }
-
-  static String detectMsgInputKind(Path path) throws IOException {
-    byte[] head = readHead(path, 512);
-    if (looksLikeOle2(head)) {
-      try (POIFSFileSystem storage = new POIFSFileSystem(path.toFile(), true)) {
-        if (Common.isNonEmailOutlookItem(MsgReader.storageString(storage.getRoot(), "001A"))) return "application/x-outlook-item";
-      }
-      return "application/vnd.ms-outlook";
-    }
-    String sniffed = Common.sniffMime(head);
-    return Common.nz(sniffed);
-  }
-
-  static byte[] readHead(Path path, int maxBytes) throws IOException {
-    byte[] head = new byte[Math.max(0, maxBytes)];
-    try (InputStream in = Files.newInputStream(path)) {
-      int off = 0;
-      while (off < head.length) {
-        int read = in.read(head, off, head.length - off);
-        if (read < 0) break;
-        off += read;
-      }
-      return off == head.length ? head : Arrays.copyOf(head, off);
-    }
-  }
-
-  static boolean looksLikeOle2(byte[] bytes) {
-    if (bytes == null || bytes.length < OLE2_SIGNATURE.length) return false;
-    for (int i = 0; i < OLE2_SIGNATURE.length; i++) {
-      if (bytes[i] != OLE2_SIGNATURE[i]) return false;
-    }
-    return true;
   }
 }

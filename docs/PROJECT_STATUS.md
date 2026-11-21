@@ -1,6 +1,17 @@
 # Project status
 
-Current release, 19 November 2026: creator and validator **2.4.0-beta.1**
+This Lite checkout ships an EML command-line creator, a Java command-line
+validator and the Even More Lite reader. See the [Lite quick start](../README.md)
+for commands. Lite publishes creator and validator **2.4.0-beta.1** with
+Even More Lite **1.7.0**. The release notes below describe EA-PDF Main.
+
+[Lite downloads](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.1)
+
+Lite Creator supports all six EA-PDF profiles for local EML. It uses Angus
+Core for MIME processing. PDF/UA output, embedded search indexes and PREMIS
+sidecars are outside the Lite Creator feature set.
+
+Main release, 19 November 2026: creator and validator **2.4.0-beta.1**
 with **Full and Even More Lite readers 1.6.0-beta.1**.
 
 C2PA/PAdES, WeasyPrint and other experimental changes remain separate in

@@ -28,14 +28,6 @@ class RemainingWorkflowTests {
       Assertions.assertThrows(Common.UserFacingException.class, () -> EmailToPDFA.parseArgs(arguments));
     }
     Assertions.assertEquals(2, EmailToPDFA.parseArgs(new String[]{"-j", "2", "--email", "a@example.org", "input.eml"}).get("jobs"));
-    for (String[] arguments : List.of(new String[]{"--unknown"}, new String[]{"--limit"}, new String[]{"--limit", "-1"},
-        new String[]{"--limit", "not-a-number"}, new String[]{"unexpected"}, new String[]{"--archive-profile", "invalid"})) {
-      Assertions.assertThrows(Common.UserFacingException.class, () -> GmailDownloadToPdf.parseArgs(arguments));
-    }
-    Assertions.assertEquals(0, GmailDownloadToPdf.parseArgs(new String[]{"--limit", "0"}).get("limit"));
-    Assertions.assertThrows(Common.UserFacingException.class, () -> MonthlyFilenameArchiveToPdf.parseArgs(new String[]{"--out"}));
-    Assertions.assertThrows(Common.UserFacingException.class, () -> MonthlyFilenameArchiveToPdf.parseArgs(new String[]{"one", "two"}));
-    Assertions.assertEquals("input", MonthlyFilenameArchiveToPdf.parseArgs(new String[]{"--debug", "input"}).get("in"));
   }
 
   @Test
@@ -51,8 +43,9 @@ class RemainingWorkflowTests {
     } finally {
       System.setOut(previous);
     }
-    Assertions.assertTrue(messages.toString(StandardCharsets.UTF_8).contains("unsupported extension"));
-    Assertions.assertTrue(messages.toString(StandardCharsets.UTF_8).contains("not an Outlook MSG or RFC 822 email"));
+    String skipped = messages.toString(StandardCharsets.UTF_8);
+    Assertions.assertTrue(skipped.contains("notes.txt (unsupported extension)"));
+    Assertions.assertTrue(skipped.contains("invalid.msg (unsupported extension)"));
     Path email = tempDir.resolve("valid.eml");
     Files.writeString(email, "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Valid\r\n\r\nBody");
     Assertions.assertEquals(List.of(email.toString()), EmailToPDFA.collectInputs(tempDir.toString()));
@@ -97,21 +90,21 @@ class RemainingWorkflowTests {
   void configurationRejectsUnsupportedVersionsAndWrongTypesAndWarnsForUnknownKeys() throws Exception {
     Path config = tempDir.resolve("config.json");
     for (String json : List.of("[]", "{\"configVersion\":2}", "{\"configVersion\":1.5}",
-        "{\"searchIndex\":{\"enabled\":\"false\"}}", "{\"searchIndex\":true}")) {
+        "{\"signing\":{\"enabled\":\"false\"}}", "{\"signing\":true}")) {
       Files.writeString(config, json);
       Assertions.assertThrows(RuntimeException.class, () -> EapdfConfig.load(config));
     }
-    Files.writeString(config, "{\"configVersion\":1,\"searchIndex\":{\"enabled\":false,\"typo\":true},\"accessibility\":{\"experimental\":{\"altTextGeneratedImages\":true}}}");
+    Files.writeString(config, "{\"configVersion\":1,\"signing\":{\"enabled\":false,\"typo\":true},\"searchIndex\":{\"enabled\":true}}");
     ByteArrayOutputStream warnings = new ByteArrayOutputStream();
     PrintStream previous = System.err;
     try {
       System.setErr(new PrintStream(warnings, true, StandardCharsets.UTF_8));
-      Assertions.assertFalse(EapdfConfig.load(config).searchIndex.enabled);
+      Assertions.assertFalse(EapdfConfig.load(config).signing.enabled);
     } finally {
       System.setErr(previous);
     }
-    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("searchIndex.typo"));
-    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("unavailable"));
+    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("signing.typo"));
+    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("unknown configuration setting: searchIndex"));
   }
 
   @Test
@@ -171,24 +164,24 @@ class RemainingWorkflowTests {
 
   @Test
   void structuredFolderMembershipsPreserveCommasAndDistinctSanitizedNames() throws Exception {
-    EmailRecord pst = AttachmentProfilePolicyTests.record("PST folder");
-    pst.folderPath = "Root/Team, Finance";
-    pst.folderMemberships.add(pst.folderPath);
+    EmailRecord nested = AttachmentProfilePolicyTests.record("Nested folder");
+    nested.folderPath = "Root/Team, Finance";
+    nested.folderMemberships.add(nested.folderPath);
     EmailRecord similar = AttachmentProfilePolicyTests.record("Different folder");
     similar.folderPath = "Root_Team, Finance";
     similar.folderMemberships.add(similar.folderPath);
-    EmailRecord gmail = AttachmentProfilePolicyTests.record("Gmail labels");
-    gmail.folderMemberships.addAll(GmailDownloadToPdf.messageLabelNames(List.of("Label_1", "Label_2"), Map.of("Label_1", "Team, Finance", "Label_2", "Projects"), "ALL_MAIL"));
-    Assertions.assertEquals(List.of("Root/Team, Finance"), PdfCollectionSupport.collectionGroupNames(pst));
-    Assertions.assertEquals(List.of("Team, Finance", "Projects"), PdfMailWriter.collectionGroupNames(gmail));
-    var sections = PdfCollectionSupport.buildFolderSections(List.of(pst, similar, gmail));
+    EmailRecord multi = AttachmentProfilePolicyTests.record("Multiple folders");
+    multi.folderMemberships.addAll(List.of("Team, Finance", "Projects"));
+    Assertions.assertEquals(List.of("Root/Team, Finance"), PdfCollectionSupport.collectionGroupNames(nested));
+    Assertions.assertEquals(List.of("Team, Finance", "Projects"), PdfMailWriter.collectionGroupNames(multi));
+    var sections = PdfCollectionSupport.buildFolderSections(List.of(nested, similar, multi));
     Assertions.assertEquals(4, sections.size());
     var folders = PdfCollectionSupport.buildCollectionFolders(sections);
     Assertions.assertEquals(4, folders.stream().map(folder -> folder.name).distinct().count());
     Assertions.assertEquals(List.of("Root/Team, Finance", "Root_Team, Finance"), sections.stream().map(section -> section.folderName).filter(name -> name.startsWith("Root")).toList());
     for (String profile : List.of("c", "ci")) {
       Path output = tempDir.resolve("folder_identity_1" + profile + ".pdf");
-      PdfMailWriter.writeEaPdfCollection(output, List.of(pst, similar), TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, profile);
+      PdfMailWriter.writeEaPdfCollection(output, List.of(nested, similar), TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, profile);
       try (PDDocument document = Loader.loadPDF(output.toFile())) {
         Assertions.assertEquals(2, TestSupport.folderNames(document).size());
         Assertions.assertEquals(2, TestSupport.folderNames(document).stream().distinct().count());

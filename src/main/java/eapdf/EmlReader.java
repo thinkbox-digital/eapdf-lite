@@ -261,13 +261,13 @@ class EmlReader {
   static final class MimeReads {
     final Set<Part> leaves = Collections.newSetFromMap(new IdentityHashMap<>());
     final Set<Part> counted = Collections.newSetFromMap(new IdentityHashMap<>());
-    long parts, decoded;
+    long decoded;
     MimeReads(Part part) throws Exception {
       var pending = new ArrayDeque<Part>();
       var seen = Collections.newSetFromMap(new IdentityHashMap<Part, Boolean>());pending.push(part);
       while (!pending.isEmpty()) {
         ProcessingLimits.checkCancelled();Part current = pending.pop();
-        if (!seen.add(current)) throw Common.fail("Cyclic MIME structure");parts++;
+        if (!seen.add(current)) throw Common.fail("Cyclic MIME structure");
         if (current.isMimeType("multipart/*")) {
           Multipart multipart = (Multipart)current.getContent();
           for (int i = multipart.getCount() - 1; i >= 0; i--) pending.push(multipart.getBodyPart(i));
@@ -289,11 +289,6 @@ class EmlReader {
         try (InputStream input = open(part,part.getInputStream())) {while(input.read(buffer)!=-1)ProcessingLimits.checkCancelled();}
       }
     }
-  }
-
-  static void checkMimeStructure(Part part, int depth, long[] totals) throws Exception {
-    MimeReads reads = new MimeReads(part);reads.finish();totals[0]+=reads.parts;totals[1]+=reads.decoded;
-    ProcessingLimits.checkMessage(totals[1],"decoded MIME contents");
   }
 
   static String displayFlowedText(String source, boolean delSp) {

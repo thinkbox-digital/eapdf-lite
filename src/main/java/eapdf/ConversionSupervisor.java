@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class ConversionSupervisor {
   private static volatile boolean worker;
-  private static final List<String> ENTRIES = List.of("eapdf.EmailToPDFA", "eapdf.GmailDownloadToPdf", "eapdf.MonthlyFilenameArchiveToPdf");
+  private static final List<String> ENTRIES = List.of("eapdf.EmailToPDFA");
   record Owner(long supervisor, String supervisorStart, long child, String childStart) {}
 
   static boolean run(Class<?> entry, String[] arguments) {
@@ -48,7 +48,7 @@ public final class ConversionSupervisor {
       writeOwner(directory, new Owner(supervisor.pid(), supervisorStart, 0, ""));
       progress = ConversionProgress.start(entry, arguments, directory);
       ConversionProgress jobProgress = progress;
-      PstJobBudget budget = PstJobBudget.forInput(entry, arguments, temporary);
+      InputJobBudget budget = InputJobBudget.forInput(entry, arguments, temporary);
       long heap = ConversionMemory.workerHeap(budget.setting("eapdf.workerHeapBytes", "EAPDF_WORKER_HEAP_BYTES",
           ConversionMemory.defaultHeap(512L * 1024 * 1024)));
       budget.useWorkerHeap(heap);
@@ -124,7 +124,7 @@ public final class ConversionSupervisor {
     String input = (String) options.get("in");
     if (input == null) return temporary;
     Path source = Path.of(input);
-    if (PstJobBudget.inputBytes(source) < 128L * 1024 * 1024) return temporary;
+    if (InputJobBudget.inputBytes(source) < 128L * 1024 * 1024) return temporary;
     Path output = Path.of((String) options.getOrDefault("out", "out")).toAbsolutePath().normalize();
     Files.createDirectories(output);
     if (memoryBacked(output)) throw Common.fail("Large email conversion needs disk-backed working storage. Choose an output folder on disk or set java.io.tmpdir to a disk folder.");
@@ -175,21 +175,11 @@ public final class ConversionSupervisor {
     }
   }
 
-  static void requestStop(Process process) {
-    process.destroy();
-    try {
-      if (!process.waitFor(5, TimeUnit.SECONDS)) stopTree(process);
-    } catch (InterruptedException error) {
-      stopTree(process);
-      Thread.currentThread().interrupt();
-    }
-  }
-
   static List<String> nativeLimits(List<String> command) {
-    return nativeLimits(command, new PstJobBudget());
+    return nativeLimits(command, new InputJobBudget());
   }
 
-  static List<String> nativeLimits(List<String> command, PstJobBudget budget) {
+  static List<String> nativeLimits(List<String> command, InputJobBudget budget) {
     if (!System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("linux")) return command;
     Path limiter = Path.of("/usr/bin/prlimit");
     if (!Files.isExecutable(limiter)) throw Common.fail("Supervised Linux conversion requires /usr/bin/prlimit (util-linux)");
@@ -326,12 +316,7 @@ public final class ConversionSupervisor {
     ConversionProgress.attach(directory);
     try (OutputTransaction transaction = new OutputTransaction(directory.resolve("outputs"), directory)) {
       String[] forwarded = Arrays.copyOfRange(arguments, 2, arguments.length);
-      switch (arguments[0]) {
-        case "eapdf.EmailToPDFA" -> EmailToPDFA.main(forwarded);
-        case "eapdf.GmailDownloadToPdf" -> GmailDownloadToPdf.main(forwarded);
-        case "eapdf.MonthlyFilenameArchiveToPdf" -> MonthlyFilenameArchiveToPdf.main(forwarded);
-        default -> throw Common.fail("Unsupported conversion worker");
-      }
+      EmailToPDFA.main(forwarded);
       ConversionProgress.stage("publishing");
       ConversionProgress.flush();
       transaction.finish(directory.resolve("manifest.json"));

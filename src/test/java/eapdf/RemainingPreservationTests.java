@@ -76,59 +76,6 @@ class RemainingPreservationTests {
   }
 
   @Test
-  void pstRecipientsRecoverOnlyMissingGroupsAndRemoveDuplicates() {
-    EmailRecord record = new EmailRecord();
-    record.rawTo = "Original Header <header@example.org>";
-    Common.addAgent(record.toAgents, "Original Header", "header@example.org");
-    EmailRecord recovered = new EmailRecord();
-    PstReader.addMissingRecipient(recovered.toAgents, "Other", "other@example.org");
-    PstReader.addMissingRecipient(recovered.ccAgents, "Copy", "copy@example.org");
-    PstReader.addMissingRecipient(recovered.bccAgents, "Hidden", "hidden@example.org");
-    PstReader.addMissingRecipient(recovered.bccAgents, "Hidden again", "HIDDEN@example.org");
-    PstReader.recoverMissingRecipientGroups(record, recovered);
-    Assertions.assertEquals("header@example.org", record.toAgents.get(0).email);
-    Assertions.assertEquals("copy@example.org", record.ccAgents.get(0).email);
-    Assertions.assertEquals(1, record.bccAgents.size());
-    Assertions.assertEquals("hidden@example.org", record.bccAgents.get(0).email);
-    Assertions.assertEquals("Original Header <header@example.org>", record.rawTo);
-  }
-
-  @Test
-  void pstSentDateUsesOriginalThenSubmissionThenDelivery() {
-    Date original = Date.from(Instant.parse("2026-10-13T12:00:00Z"));
-    Date submitted = Date.from(Instant.parse("2026-10-13T13:00:00Z"));
-    Date delivered = Date.from(Instant.parse("2026-10-13T14:00:00Z"));
-    EmailRecord record = new EmailRecord();
-    record.rawDateHeader = "Tue, 13 Oct 2026 08:00:00 -0400";
-    PstReader.populatePstSentDate(record, submitted, delivered);
-    Assertions.assertEquals(original, Common.parseMessageDate(record.sentXmp));
-    Assertions.assertEquals(Common.fmtDate(original), record.date);
-    Assertions.assertEquals("Tue, 13 Oct 2026 08:00:00 -0400", record.rawDateHeader);
-    record.rawDateHeader = "";
-    PstReader.populatePstSentDate(record, submitted, delivered);
-    Assertions.assertEquals(submitted, Common.parseMessageDate(record.sentXmp));
-    record.rawDateHeader = "";
-    PstReader.populatePstSentDate(record, null, delivered);
-    Assertions.assertEquals(delivered, Common.parseMessageDate(record.sentXmp));
-    record.rawDateHeader = "not a date";
-    PstReader.populatePstSentDate(record, submitted, delivered);
-    Assertions.assertEquals(submitted, Common.parseMessageDate(record.sentXmp));
-    Assertions.assertEquals("not a date", record.rawDateHeader);
-  }
-
-  @Test
-  void pstMessageIdFallbackKeepsRecoveredHeaderAndReportsConflicts() {
-    EmailRecord record = new EmailRecord();
-    record.messageId = "<header@example.org>";
-    PstReader.preservePstMessageId(record, "  ");
-    Assertions.assertEquals("<header@example.org>", record.messageId);
-    PstReader.preservePstMessageId(record, "<dedicated@example.org>");
-    Assertions.assertEquals("<dedicated@example.org>", record.messageId);
-    Assertions.assertEquals(1, record.conversionWarnings.size());
-    Assertions.assertTrue(record.conversionWarnings.get(0).contains("<header@example.org>"));
-  }
-
-  @Test
   void chronologyUsesInstantsAcrossFormatsAndPutsUnknownDatesLast() {
     EmailRecord earlier = new EmailRecord();
     earlier.rawDateHeader = "Tue, 13 Oct 2026 08:30:00 -0400";
@@ -163,20 +110,6 @@ class RemainingPreservationTests {
       Assertions.assertEquals("<parent@example.org> <other@example.org>", items.item(0).getTextContent());
     }
   }
-
-  @Test
-  void gmailSelectionResolvesNamesIdsAndAllAliasesWithoutAcceptingTypos() {
-    Map<String, String> labels = Map.of("INBOX", "Inbox", "Label_1", "Projects", "Label_2", "Team, Finance");
-    Assertions.assertEquals(List.of("Label_1"), GmailDownloadToPdf.resolveLabelIds("Projects", labels));
-    Assertions.assertEquals(List.of("Label_1"), GmailDownloadToPdf.resolveLabelIds("Label_1", labels));
-    Assertions.assertEquals(List.of("INBOX", "Label_1"), GmailDownloadToPdf.resolveLabelIds("INBOX, Projects", labels));
-    Assertions.assertEquals(List.of("Label_2"), GmailDownloadToPdf.resolveLabelIds("Team, Finance", labels));
-    for (String alias : List.of("ALL", "all_mail", "*", "")) Assertions.assertEquals(List.of(), GmailDownloadToPdf.resolveLabelIds(alias, labels));
-    Assertions.assertThrows(Common.UserFacingException.class, () -> GmailDownloadToPdf.resolveLabelIds("Project", labels));
-    Assertions.assertThrows(Common.UserFacingException.class, () -> GmailDownloadToPdf.resolveLabelIds("Projects", Map.of("Label_1", "Projects", "Label_2", "Projects")));
-  }
-
-
 
   @Test
   void encryptedBodyShowsAnExplicitNoticeAndPreservesOriginalSource() throws Exception {
@@ -214,24 +147,4 @@ class RemainingPreservationTests {
     Assertions.assertEquals(1, mixed.conversionWarnings.size(), "An unsupported section actually selected for rendering still needs a warning");
   }
 
-  @Test
-  void emptyMsgAttachmentIsNotDiscardedByTheReader() throws Exception {
-    Path input = tempDir.resolve("empty.msg");
-    try (var storage = new org.apache.poi.poifs.filesystem.POIFSFileSystem()) {
-      PreservationRegressionTests.writeMessageStorage(storage.getRoot(), 32, "Empty attachment", "Body", 1);
-      var attachment = (org.apache.poi.poifs.filesystem.DirectoryNode)storage.getRoot().createDirectory("__attach_version1.0_#00000000");
-      attachment.createDocument("__properties_version1.0", new java.io.ByteArrayInputStream(new byte[8]));
-      attachment.createDocument("__substg1.0_3707001F", new java.io.ByteArrayInputStream("empty.bin\0".getBytes(StandardCharsets.UTF_16LE)));
-      attachment.createDocument("__substg1.0_37010102", new java.io.ByteArrayInputStream(new byte[0]));
-      try (var output = Files.newOutputStream(input)) {
-        storage.writeFilesystem(output);
-      }
-    }
-    EmailRecord record = MsgReader.readMsg(input.toString(), "", List.of(), false);
-    Assertions.assertEquals(1, record.attachmentCount);
-    AssociatedFile attachment = record.associatedFiles.stream().filter(file -> file.emailAttachment).findFirst().orElseThrow();
-    Assertions.assertEquals("empty.bin", attachment.filename);
-    Assertions.assertEquals(0, attachment.bytes.length);
-    Assertions.assertEquals("d41d8cd98f00b204e9800998ecf8427e", attachment.checksumMd5);
-  }
 }

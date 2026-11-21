@@ -32,60 +32,6 @@ class PdfWriterSingleMessageTests {
   }
 
   @Test
-  void defaultPstOutputPreservesExportAndNativeAttachmentBytes() throws Exception {
-    EmailRecord record = PstReader.readPst(TestSupport.fixturePath("test.pst").toString(), "", List.of(), false)
-        .stream().filter(candidate -> candidate.associatedFiles.stream().anyMatch(file -> file.emailAttachment))
-        .findFirst().orElseThrow();
-    byte[] expectedSource = Common.synthesizeEml(record);
-    var expectedAttachments = new java.util.ArrayList<String>();
-    for (AssociatedFile file : record.associatedFiles) if (file.emailAttachment) {
-      try (var input = file.openData()) { expectedAttachments.add(Common.sha256Hex(input.readAllBytes())); }
-    }
-    Path output = tempDir.resolve("pst_default_1s.pdf");
-    PdfMailWriter.writeEaPdfA3(output, record, TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, 1);
-    try (PDDocument document = Loader.loadPDF(output.toFile())) {
-      Assertions.assertTrue(TestSupport.metadataXml(document).contains("<pdfmailid:conformance>s</pdfmailid:conformance>"));
-      var sources = AttachmentProfilePolicyTests.files(document).values().stream()
-          .filter(file -> "Source".equals(file.getCOSObject().getNameAsString(org.apache.pdfbox.cos.COSName.getPDFName("AFRelationship"))))
-          .toList();
-      Assertions.assertEquals(1, sources.size());
-      Assertions.assertArrayEquals(expectedSource, sources.getFirst().getEmbeddedFile().toByteArray());
-      var actualAttachments = new java.util.ArrayList<String>();
-      for (var page : document.getPages()) for (var annotation : page.getAnnotations()) {
-        if (annotation instanceof org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment attachment) {
-          var file = (org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification) attachment.getFile();
-          actualAttachments.add(Common.sha256Hex(file.getEmbeddedFile().toByteArray()));
-        }
-      }
-      java.util.Collections.sort(expectedAttachments); java.util.Collections.sort(actualAttachments);
-      Assertions.assertEquals(expectedAttachments, actualAttachments);
-    }
-  }
-
-  @Test
-  void isolatedPstOutputDoesNotEmbedOrdinaryAttachmentsOrSources() throws Exception {
-    Path pstPath = TestSupport.fixturePath("test.pst");
-    List<EmailRecord> records = PstReader.readPst(pstPath.toString(), "", List.of(), false);
-    EmailRecord record = records.stream()
-        .filter(candidate -> candidate.associatedFiles.stream().anyMatch(file -> file.emailAttachment))
-        .findFirst()
-        .orElseThrow(() -> new AssertionError("PST fixture must contain an ordinary attachment"));
-    List<AssociatedFile> attachments = record.associatedFiles.stream()
-        .filter(file -> file.emailAttachment)
-        .toList();
-    Assertions.assertTrue(attachments.stream().allMatch(file -> file.embedInPdf));
-    record.embedSourceMessage = false;
-    Path output = tempDir.resolve("pst_1si.pdf");
-    PdfMailWriter.writeEaPdfA3(output, record, TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir.resolve("debug"), 1);
-    try (PDDocument document = Loader.loadPDF(output.toFile())) {
-      Assertions.assertTrue(TestSupport.metadataXml(document).contains("<pdfmailid:conformance>si</pdfmailid:conformance>"));
-      Assertions.assertTrue(AttachmentProfilePolicyTests.files(document).isEmpty());
-      Assertions.assertFalse(document.getDocumentCatalog().getCOSObject().containsKey(org.apache.pdfbox.cos.COSName.getPDFName("AF")));
-      Assertions.assertEquals(attachments.size(), record.attachmentCount);
-    }
-  }
-
-  @Test
   void writeEaPdfA3EmbedsExpectedFilesAndXmp() throws Exception {
     Path emlPath = TestSupport.firstInputWithExtension(".eml");
     EmailRecord record = EmlReader.readEml(

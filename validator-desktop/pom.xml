@@ -5,7 +5,7 @@
   <groupId>local</groupId><artifactId>eapdf-validator</artifactId><version>2.4.0-beta.1</version>
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
-    <validator.main.class>eapdf.ValidatorGui</validator.main.class>
+    <validator.main.class>eapdf.JavaValidation</validator.main.class>
     <project.build.outputTimestamp>2026-10-31T00:00:00Z</project.build.outputTimestamp>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <eapdf.build.directory>${java.io.tmpdir}/eapdf-validator-build</eapdf.build.directory>

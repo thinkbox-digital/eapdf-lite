@@ -67,31 +67,6 @@ class ValidationResourceTests {
             assertEquals("EMBEDDED_STREAM", brief.getAsJsonArray("failure_codes").get(0).getAsString());
         }
     }
-    @Test void desktopKeepsAllOccurrencesOnDiskAndSavesTheUnchangedReport() throws Exception {
-        Path output = temporary.resolve("desktop.json"), saved = temporary.resolve("saved.json");
-        try (var report = new JavaValidation.Report("input.pdf", true)) {
-            report.pdfa = JsonParser.parseString("{\"status\":\"PASS\",\"ran\":true,\"compliant\":true,\"profile_allowed\":true}").getAsJsonObject();
-            for (int i = 0; i < 12000; i++) report.add("PASS", "EMBEDDED_STREAM", "Preserved payload", Map.of("file", "email-" + i));
-            report.add("FAIL", "EMBEDDED_STREAM", "Missing payload", Map.of("file", "last-email"));
-            report.write(output);
-        }
-        var result = ValidatorGui.Result.parse(output);
-        try {
-            assertInstanceOf(ReportFindings.class, result.findings());
-            assertEquals(12001, result.findings().size());
-            assertEquals("FAIL", result.status());
-            var groups = ValidatorGui.groupFindings(result.findings());
-            assertEquals(2, groups.size());
-            assertEquals(12000, groups.getFirst().count());
-            assertTrue(groups.getFirst().detailText().contains("Save the report"));
-            assertTrue(groups.getLast().detailText().contains("last-email"));
-            result.save(saved); assertEquals(-1, Files.mismatch(output, saved));
-        } finally { result.close(); }
-        // A false PASS at the end of a large stream is still rejected.
-        String content = Files.readString(output).replace("\"status\": \"FAIL\"", "\"status\": \"PASS\"");
-        Files.writeString(output, content);
-        assertThrows(java.io.IOException.class, () -> ValidatorGui.Result.parse(output));
-    }
     @Test void storedMimeSlicesKeepHeadersAndMultipartBodiesAfterTheirInputCloses() throws Exception {
         byte[] first = ("Subject: first\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nbody\r\n--b\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=data.bin\r\n\r\nAAECAw==\r\n--b--\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         byte[] second = "Subject: second\r\n\r\nseparate".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
@@ -116,9 +91,13 @@ class ValidationResourceTests {
             ValidationSession.pdfaFinished(JsonParser.parseString("{\"status\":\"PASS\",\"ran\":true,\"compliant\":true,\"profile_allowed\":true}").getAsJsonObject());
             session.failed("Stopped during EA-PDF checking.");
         }
-        var parsed = ValidatorGui.Result.parse(Files.readString(output));
-        assertEquals("INCOMPLETE", parsed.status()); assertEquals("PASS", parsed.pdfaStatus());
-        assertTrue(parsed.findings().stream().anyMatch(f -> f.message().contains("Stopped during")));
+        var parsed = JsonParser.parseString(Files.readString(output)).getAsJsonObject();
+        var summary = parsed.getAsJsonObject("summary");
+        assertEquals("INCOMPLETE", summary.get("status").getAsString());
+        assertEquals("PASS", summary.get("pdfa_status").getAsString());
+        assertTrue(parsed.getAsJsonArray("items").asList().stream().map(JsonElement::getAsJsonObject)
+            .anyMatch(item -> "VALIDATION_INCOMPLETE".equals(item.get("code").getAsString())
+                && "Stopped during EA-PDF checking.".equals(item.get("message").getAsString())));
         try (var report = new JavaValidation.Report("input.pdf")) {
             report.pdfa = JsonParser.parseString("{\"status\":\"ERROR\"}").getAsJsonObject();
             assertEquals("INCOMPLETE", report.summary().get("status").getAsString());

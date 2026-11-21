@@ -14,14 +14,13 @@ import static eapdf.MailRenderPolicy.*;
 
 /** HTML preparation and rendering; document assembly and publication stay with the writer. */
 final class MailHtmlRenderer {
- private final BooleanSupplier accessibility;
  private final BiFunction<EmailRecord,String,String> profile;
  private final Function<EmailRecord,List<AssociatedFile>> displayFiles;
- MailHtmlRenderer(BooleanSupplier accessibility, BiFunction<EmailRecord,String,String> profile,
+ MailHtmlRenderer(BiFunction<EmailRecord,String,String> profile,
      Function<EmailRecord,List<AssociatedFile>> displayFiles) {
-   this.accessibility=accessibility;this.profile=profile;this.displayFiles=displayFiles;
+   this.profile=profile;
+   this.displayFiles=displayFiles;
  }
- private boolean pdfUaFeaturesEnabled(){return accessibility.getAsBoolean();}
  interface XhtmlRenderer {byte[] render(String xhtml,String baseUri,String fontPath)throws Exception;}
  record BodyColors(String css,boolean background){}
 String nativeAttachmentHtml(EmailRecord record, AssociatedFile file) {
@@ -48,12 +47,7 @@ byte[] renderHtmlPdf(String html, String baseUri, String fontPath, EmailRecord r
   d.outputSettings().charset(StandardCharsets.UTF_8);
   d.outputSettings().prettyPrint(false);
 
-  for (Element e : d.select("img")) {
-    if (!e.hasAttr("alt")) {
-      e.attr("alt", pdfUaFeaturesEnabled() ? "Image from the original email" : "");
-      if (pdfUaFeaturesEnabled()) Common.warn(r, "An email image has no source alternative text; a generic description is used and should be reviewed for accessibility.");
-    }
-  }
+  for (Element image : d.select("img:not([alt])")) image.attr("alt", "");
 
   String finalXhtml = d.outerHtml();
   if (debug) {
@@ -118,7 +112,8 @@ byte[] renderXhtmlPdf(String xhtml, String baseUri, String fontPath, boolean fit
   builder.useColorProfile(Files.readAllBytes(Path.of(Common.resolveIccPath(null))));
   FontSupport.register(builder, new File(fontPath), "ArchiveFont");
   EmailRecord renderRecord = ACTIVE_RENDER_RECORD.get();
-  builder.usePdfUaAccessibility(pdfUaFeaturesEnabled() || (renderRecord != null && !Common.nz(renderRecord.headerTagMarker).isBlank()), 2);
+  // This renderer API supplies PDF 2.0 marked content for EA-PDF structure.
+  builder.usePdfUaAccessibility(true, 2);
   xhtml = FontSupport.configure(builder, fontPath, xhtml, ACTIVE_RENDER_RECORD.get());
   builder.useUriResolver(REMOTE_ASSET_URI_RESOLVER);
   builder.useProtocolsStreamImplementation(REMOTE_ASSET_STREAM_FACTORY, "http", "https");
@@ -416,9 +411,6 @@ String canonicalizeEmailHtml(String html, EmailRecord r, boolean debug) {
   // original markup in the embedded source, but omit them from the page.
   for (Element e : d.select("input[type=hidden]")) e.remove();
   for (Element e : d.getAllElements()) {
-    if (pdfUaFeaturesEnabled() && !e.hasAttr("lang") && e.hasAttr("xml:lang")) {
-      e.attr("lang", e.attr("xml:lang"));
-    }
     String tag = Common.nz(e.tagName());
     if (tag.contains(":")) {
       e.tagName("span");
@@ -445,10 +437,6 @@ String canonicalizeEmailHtml(String html, EmailRecord r, boolean debug) {
   Element sourceBody = root.appendElement("div").addClass("ea-email-body");
   body.attributes().forEach(attribute -> sourceBody.attr(attribute.getKey(), attribute.getValue()));
   sourceBody.addClass("ea-email-body");
-  if (pdfUaFeaturesEnabled() && !sourceBody.hasAttr("lang")) {
-    Element sourceHtml = d.selectFirst("html[lang]");
-    if (sourceHtml != null) sourceBody.attr("lang", sourceHtml.attr("lang"));
-  }
   sourceBody.html(Common.stripInvalidXml(inner));
   for (Element pre : sourceBody.select("pre")) {
     int[] column = new int[1];
@@ -728,14 +716,11 @@ boolean shouldBoldHeaderLabel(String label) {
 }
 
 void appendHeaderRow(StringBuilder s, String label, String value) {
-  String headerTag = pdfUaFeaturesEnabled() ? "th" : "td";
-  s.append("<tr><").append(headerTag);
-  if (pdfUaFeaturesEnabled()) s.append(" scope=\"row\"");
-  s.append(" class=\"label");
+  s.append("<tr><th scope=\"row\" class=\"label");
   if (shouldBoldHeaderLabel(label)) s.append(" label-strong");
   s.append("\">")
    .append(Common.escapeHtml(label))
-   .append(":</").append(headerTag).append("><td class=\"value\">")
+   .append(":</th><td class=\"value\">")
    .append(Common.escapeHtml(Common.nz(value)))
    .append("</td></tr>");
 }

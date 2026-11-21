@@ -5,10 +5,7 @@ import java.nio.file.Path;
 import java.util.List;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.*;
-import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
-import org.apache.pdfbox.pdfparser.PDFStreamParser;
-import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,29 +36,25 @@ class AccessibilityRepairTests {
 
   @Test
   void linkedInlineImageKeepsItsFigureAndLinkWithoutAParagraphInsideTheLink() throws Exception {
-    boolean previous = PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures;
-    try {
-      PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = true;
-      String image = java.util.Base64.getEncoder().encodeToString(CidUrlTests.image());
-      var record = EmlReader.readRfc822Bytes(("From: a@example.org\r\nTo: b@example.org\r\n"
-          + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Linked image\r\n"
-          + "Content-Type: text/html; charset=UTF-8\r\n\r\n"
-          + "<p>Before <a href='https://example.org/image'><span><img alt='Four colors' "
-          + "width='24' height='24' src='data:image/png;base64," + image + "'></span></a> after</p>")
-          .getBytes(StandardCharsets.UTF_8), "linked.eml", "linked.eml", "", List.of(), false);
-      byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("eml_linked_1s.pdf"), record,
-          TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
-      try (var pdf = Loader.loadPDF(bytes)) {
-        var root = pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject();
-        int[] counts = new int[2];
-        checkLinkedFigure(root.getDictionaryObject(COSName.K), false, counts);
-        assertArrayEquals(new int[] {1, 1}, counts);
-        assertTrue(pdf.getPage(0).getAnnotations().stream().anyMatch(annotation ->
-            annotation instanceof PDAnnotationLink link
-                && link.getAction() instanceof org.apache.pdfbox.pdmodel.interactive.action.PDActionURI action
-                && "https://example.org/image".equals(action.getURI())));
-      }
-    } finally { PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = previous; }
+    String image = java.util.Base64.getEncoder().encodeToString(CidUrlTests.image());
+    var record = EmlReader.readRfc822Bytes(("From: a@example.org\r\nTo: b@example.org\r\n"
+        + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Linked image\r\n"
+        + "Content-Type: text/html; charset=UTF-8\r\n\r\n"
+        + "<p>Before <a href='https://example.org/image'><span><img alt='Four colors' "
+        + "width='24' height='24' src='data:image/png;base64," + image + "'></span></a> after</p>")
+        .getBytes(StandardCharsets.UTF_8), "linked.eml", "linked.eml", "", List.of(), false);
+    byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("eml_linked_1s.pdf"), record,
+        TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
+    try (var pdf = Loader.loadPDF(bytes)) {
+      var root = pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject();
+      int[] counts = new int[2];
+      checkLinkedFigure(root.getDictionaryObject(COSName.K), false, counts);
+      assertArrayEquals(new int[] {1, 1}, counts);
+      assertTrue(pdf.getPage(0).getAnnotations().stream().anyMatch(annotation ->
+          annotation instanceof PDAnnotationLink link
+              && link.getAction() instanceof org.apache.pdfbox.pdmodel.interactive.action.PDActionURI action
+              && "https://example.org/image".equals(action.getURI())));
+    }
   }
 
   private void checkLinkedFigure(COSBase value, boolean inLink, int[] counts) {
@@ -91,83 +84,48 @@ class AccessibilityRepairTests {
   }
 
   @Test
-  void linkDescriptionsAndInheritedLanguageAreImprovedOnlyWhenEnabled() throws Exception {
-    boolean previous = PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures;
-    String visible = null;
-    try {
-      for (boolean enabled : new boolean[]{false, true}) {
-        PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = enabled;
-        String html = "<html xml:lang='fr'><body><p>Bonjour <a href='https://example.org'>visiter</a> "
-            + "<a href='https://example.org/help' title='Aide du site'>aide</a></p>"
-            + "<p xml:lang='de'>Guten Tag</p></body></html>";
-        EmailRecord record = EmlReader.readRfc822Bytes(("From: a@example.org\r\nTo: b@example.org\r\n"
-            + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Languages and links\r\n"
-            + "Content-Type: text/html; charset=UTF-8\r\n\r\n" + html).getBytes(StandardCharsets.UTF_8),
-            "languages.eml", "languages.eml", "", List.of(), false);
-        var canonical = org.jsoup.Jsoup.parse(PdfMailWriter.canonicalizeEmailHtml(html, record, false));
-        assertEquals(enabled ? "fr" : "", canonical.selectFirst(".ea-email-body").attr("lang"));
-        assertEquals(enabled ? "de" : "", canonical.selectFirst("p:contains(Guten)").attr("lang"));
-        byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("languages-" + enabled + ".pdf"), record,
-            TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
-        try (var pdf = Loader.loadPDF(bytes)) {
-          String text = new PDFTextStripper().getText(pdf);
-          if (visible == null) visible = text;
-          else assertEquals(visible, text);
-          var tree = pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject();
-          var numbers = (COSArray)((COSDictionary)tree.getDictionaryObject(COSName.getPDFName("ParentTree"))).getDictionaryObject(COSName.NUMS);
-          int checked = 0;
-          for (var page : pdf.getPages()) for (var annotation : page.getAnnotations()) {
-            if (!(annotation instanceof PDAnnotationLink)) continue;
-            int key = annotation.getCOSObject().getInt(COSName.getPDFName("StructParent"));
-            COSDictionary owner = null;
-            for (int i = 0; i < numbers.size(); i += 2)
-              if (((COSNumber)numbers.getObject(i)).intValue() == key) owner = (COSDictionary)numbers.getObject(i + 1);
-            assertNotNull(owner);
-            String alt = owner.getString(COSName.ALT);
-            if (enabled) assertEquals(alt, annotation.getContents());
-            if (annotation.getContents().equals("visiter")) assertEquals(enabled ? "visiter" : "", alt);
-            checked++;
-          }
-          assertEquals(2, checked);
-          if (enabled) {
-            assertTrue(hasLanguage(tree.getDictionaryObject(COSName.K), "fr"));
-            assertTrue(hasLanguage(tree.getDictionaryObject(COSName.K), "de"));
-          }
-          String metadata = TestSupport.metadataXml(pdf);
-          assertEquals(enabled, metadata.contains("<pdfuaid:part>2</pdfuaid:part>"));
-          assertEquals(enabled, metadata.contains("<pdfuaid:rev>2024</pdfuaid:rev>"));
-        }
+  void linksKeepTheirVisibleTextAndStructureOwners() throws Exception {
+    String html = "<p>Bonjour <a href='https://example.org'>visiter</a> "
+        + "<a href='https://example.org/help' title='Aide du site'>aide</a></p>";
+    EmailRecord record = EmlReader.readRfc822Bytes(("From: a@example.org\r\nTo: b@example.org\r\n"
+        + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Links\r\n"
+        + "Content-Type: text/html; charset=UTF-8\r\n\r\n" + html).getBytes(StandardCharsets.UTF_8),
+        "links.eml", "links.eml", "", List.of(), false);
+    byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("links.pdf"), record,
+        TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
+    try (var pdf = Loader.loadPDF(bytes)) {
+      String text = new PDFTextStripper().getText(pdf).replaceAll("\\s+", " ");
+      assertTrue(text.contains("Bonjour visiter aide"), text);
+      var tree = pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject();
+      var numbers = tree.getCOSDictionary(COSName.PARENT_TREE).getCOSArray(COSName.NUMS);
+      int checked = 0;
+      for (var page : pdf.getPages()) for (var annotation : page.getAnnotations()) {
+        if (!(annotation instanceof PDAnnotationLink)) continue;
+        int key = annotation.getCOSObject().getInt(COSName.STRUCT_PARENT);
+        COSDictionary owner = null;
+        for (int i = 0; i < numbers.size(); i += 2)
+          if (((COSNumber)numbers.getObject(i)).intValue() == key) owner = (COSDictionary)numbers.getObject(i + 1);
+        assertNotNull(owner);
+        assertEquals("Link", owner.getNameAsString(COSName.S));
+        checked++;
       }
-    } finally { PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = previous; }
-  }
-
-  private boolean hasLanguage(COSBase value, String language) {
-    if (value instanceof COSObject ref) value = ref.getObject();
-    if (value instanceof COSArray array) {
-      for (var child : array) if (hasLanguage(child, language)) return true;
-    } else if (value instanceof COSDictionary dictionary) {
-      return language.equals(dictionary.getString(COSName.LANG)) || hasLanguage(dictionary.getDictionaryObject(COSName.K), language);
+      assertEquals(2, checked);
     }
-    return false;
   }
 
   @Test
   void emptyHeaderAndBodyCellsKeepTheirTableColumns() throws Exception {
-    boolean previous = PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures;
-    try {
-      PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = true;
-      var record = EmlReader.readRfc822Bytes(("From: a@example.org\r\n"
-          + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Blank cells\r\n"
-          + "Content-Type: text/html; charset=UTF-8\r\n\r\n"
-          + "<table><tr><th>A</th><th>B</th></tr><tr><td></td><td>present</td></tr></table>")
-          .getBytes(StandardCharsets.UTF_8), "blank.eml", "blank.eml", "", List.of(), false);
-      byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("blank.pdf"), record,
-          TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
-      try (var pdf = Loader.loadPDF(bytes)) {
-        assertTrue(checkTwoColumnRows(pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject()) >= 6);
-        assertTrue(new PDFTextStripper().getText(pdf).contains("present"));
-      }
-    } finally { PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = previous; }
+    var record = EmlReader.readRfc822Bytes(("From: a@example.org\r\n"
+        + "Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: Blank cells\r\n"
+        + "Content-Type: text/html; charset=UTF-8\r\n\r\n"
+        + "<table><tr><th>A</th><th>B</th></tr><tr><td></td><td>present</td></tr></table>")
+        .getBytes(StandardCharsets.UTF_8), "blank.eml", "blank.eml", "", List.of(), false);
+    byte[] bytes = PdfMailWriter.buildSingleMessagePdf(temp.resolve("blank.pdf"), record,
+        TestSupport.fontPath(), TestSupport.iccPath(), false, temp, 1, "s").pdfBytes;
+    try (var pdf = Loader.loadPDF(bytes)) {
+      assertTrue(checkTwoColumnRows(pdf.getDocumentCatalog().getStructureTreeRoot().getCOSObject()) >= 6);
+      assertTrue(new PDFTextStripper().getText(pdf).contains("present"));
+    }
   }
 
   private int checkTwoColumnRows(COSBase value) {
@@ -184,20 +142,4 @@ class AccessibilityRepairTests {
     return (row ? 1 : 0) + checkTwoColumnRows(children);
   }
 
-  @Test
-  void generatedRulesAreArtifactsOnlyWhenEnabled() throws Exception {
-    boolean previous = PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures;
-    try {
-      for (boolean enabled : new boolean[]{false, true}) {
-        PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = enabled;
-        try (var pdf = new PDDocument()) {
-          var page = new PDPage();pdf.addPage(page);
-          try (var content = new PDPageContentStream(pdf, page)) { PdfMailWriter.drawRule(content, 10, 10, 100, 10); }
-          var tokens = new PDFStreamParser(page).parse();
-          assertEquals(enabled, tokens.contains(COSName.ARTIFACT));
-          assertEquals(1, tokens.stream().filter(t -> t instanceof Operator op && "S".equals(op.getName())).count());
-        }
-      }
-    } finally { PdfMailWriter.CONFIG.accessibility.addPdfUaFeatures = previous; }
-  }
 }

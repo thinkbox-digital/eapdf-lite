@@ -1,6 +1,6 @@
 # Standalone Java EA-PDF validator
 
-This is a Java desktop app that checks one PDF at a time. It builds into one
+This command-line tool checks one PDF at a time. It builds into one
 runnable JAR. **Java 21 or later is the only runtime installation needed.**
 No Python, Docker, browser, server, source checkout or separate rule files are
 needed. The PDF/A engine, its libraries, the EA-PDF rule descriptions and the
@@ -54,8 +54,8 @@ On Linux, the JAR is written to `/tmp/eapdf-validator-build/eapdf-validator-2.4.
 Override the build directory with `-Deapdf.build.directory=/tmp/your-build`.
 No build files are written to the creator's `target/` directory.
 `verify` checks the final shaded JAR's manifest, ZIP CRCs, bundled runtime classes,
-resources and Java 21 entry point from a clean directory. Both Maven JAR and Shade
-stages explicitly set `Main-Class: eapdf.ValidatorGui`.
+resources and Java 21 entry point from a clean directory. The JAR launches
+`eapdf.JavaValidation`.
 
 To build, verify and atomically replace the distributable:
 
@@ -70,35 +70,21 @@ The packaging command verifies the build before replacing the distributable.
 ## Run
 
 ```sh
-java -jar /path/to/eapdf-validator-2.4.0-beta.1.jar
+java -jar /path/to/eapdf-validator-2.4.0-beta.1.jar input.pdf validation-report.json
 ```
 
-The JAR includes its runtime libraries, rules and specification references; only
-a Java 21 desktop runtime is needed. On Linux/Crostini it needs the normal graphical
-desktop session; a headless session cannot show the Swing window. No Maven cache,
-repository checkout, Python or separate veraPDF installation is used at runtime.
+The JAR includes its runtime libraries and validation rules. It also runs in a
+headless Java 21 environment.
 
-The window starts at 2,000 × 1,100 pixels with 16-point text.
+The exit code is `0` for **PASS**, `2` for **FAIL** or **INCOMPLETE**, and `1` if
+the command receives the wrong number of arguments. Read the report's summary
+to distinguish a failed check from an incomplete run.
 
-Choose a PDF and press **Validate**. Select a row to read its details, including
-PDF/A failures. The table includes rule numbers. **Keyword in Rule** filters rule
-codes using all entered words. **Esc** clears the filter. Finding and
-**Specification** appear side by side.
-Findings name concrete required values and types, such as version 1 and revision
-2024. The specification pane shows the cited specification text,
-section, table and both printed/PDF page numbers. References are bundled; the
-source PDF is not needed at runtime. Summaries are labeled as paraphrases, and
-operational checks do not receive invented specification pages.
-The initial list follows specification order. Identical rule/result/message rows
-are grouped. Select a group to see its occurrence count and details;
-different results or messages remain separate. Collection details show each
-child result and relevant failed or incomplete checks. **Save report** preserves
-the full, ungrouped JSON report. **Stop** cancels a run.
-
-The input PDF is read only. A separate Java worker lets Stop end checking without
-closing the window. Private scratch prefers disk storage when the system temp
-folder uses RAM. Collection children are checked recursively with cycle detection and byte accounting;
-fixed child-count, depth and lifetime decoded-byte cutoffs do not terminate checks.
+The validator reads the input PDF and streams the complete report to the
+specified JSON file. It also writes `.progress.json` and `.summary.json` sidecars.
+Private scratch prefers disk storage when the system temp folder uses RAM.
+Collection members are checked recursively with cycle detection and byte
+accounting.
 
 On Linux, workers use the inherited hard open-file allowance. An explicit
 `VALIDATOR_MAX_OPEN_FILES` can lower it. Work files/reports default to one eighth
@@ -114,16 +100,8 @@ XMP defaults to one sixteenth of the heap, subject to Java array capacity.
 Explicit stream settings remain available. Exhausted budgets produce incomplete checks, not invented
 conformance failures. Real missing source information can still produce failures.
 
-The desktop worker uses two thirds of currently available memory, respecting container
-limits. CLI users can set the JVM heap with `-Xmx`; large-file checks may need more
-than the JVM's default. The measured 1.28 GB PST PDF/A check used a 16 GiB heap.
-
-CLI reports include `.progress.json` and `.summary.json` sidecars. The complete
-report is streamed to disk. The desktop keeps finding details on disk and retains
-all groups/counts; large detail panes show a stated excerpt. Save writes every
-finding. Cancellation produces an incomplete report which can also be saved.
-Private working files are removed when checking ends or the displayed report is
-closed. Large MIME sources share one disk file instead of retained body arrays.
+Set the JVM heap with `-Xmx` before `-jar` when a large PDF needs more memory.
+Large MIME sources share one disk file instead of retained body arrays.
 
 The veraPDF rule predicates and bundled profiles are unchanged. A source-included
 adaptation spills exact visited identities to disk; a bounded glyph cache preserves
@@ -132,14 +110,6 @@ changes, not an upstream release or independent certification.
 
 ## Checks for developers
 
-Normal tests run during `package`. To also open the window, validate a real
-sample, stop a second run and check temporary-file cleanup on a graphical desktop:
-
-```sh
-mvn -f validator-desktop/pom.xml -Deapdf.validator.uiTest=true test
-```
-
-The app bundles the same veraPDF component versions used by the pinned
-1.31.224 CLI: core 1.31.56, pdf-model 1.31.14, parser 1.31.71, validation-model 1.31.221.
-Versions and the unchanged rule/profile hashes are checked before use. The
-PDF/A library runs directly in Java; no CLI installation is needed.
+Run `mvn -f validator-desktop/pom.xml verify` to test the validator and its
+runnable JAR. Versions and bundled rule/profile hashes are checked before use.
+The PDF/A library runs directly inside the validator.

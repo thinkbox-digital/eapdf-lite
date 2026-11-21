@@ -1,100 +1,84 @@
-# EA-PDF readers
+# EA-PDF Even More Lite
 
-**Full and Even More Lite readers 1.6.0-beta.1**, with creator/validator 2.4.0-beta.1.
-Both readers restore recognized family names for affected embedded CJK fonts.
-Read local PDFs, browse email folders and save attachments. Files stay on your
-computer. No Java, server or internet connection is needed by the extensions.
+A reading-only copy of Viewer Lite with a smaller interface and application.
+Open a local PDF or drop it into the window. Use Parent, previous/next page,
+page number and zoom. Close releases the document; it also cancels an opening.
+The left pane shows messages, folders and collection PDFs; the centre displays
+pages and the right pane lists embedded assets. Drag either divider or focus it
+and use the arrow keys to resize. The pane-heading chevrons hide Messages or
+Files. Show messages and Show files restore them above the document. Page, zoom
+and Parent controls sit above the PDF. The top bar shows the open filename or
+the path to the active embedded PDF.
+Click a message to read its body and known assets; All files restores the complete
+document inventory. Parent returns to the previous page in the containing PDF.
+Scroll normally; text selection and accessible PDF structure remain available.
 
-[Download](https://github.com/thinkbox-digital/eapdf/releases/tag/v2.4.0-beta.1) ·
-[User guide](../docs/manual/user-manual.html#viewer) · [Privacy](../docs/site/privacy.md)
+The download-arrow icon saves exact embedded bytes. The eye icon opens a PDF or
+previews supported images/text using the Full viewer's shared preview component.
+Hover titles and accessible labels identify both actions. Attachment links open
+or preview supported files; other types download. Files are grouped as collection
+PDFs, email sources, attachments and supporting files. The total includes all
+embedded files, not just email messages. Asset rows show known owners and actual
+attachment pages. Go to page
+jumps to that attachment's page. Document attachments have no invented page.
+The known owning subject appears directly under a filename, as in the Full reader.
+Go to page remains available for a recorded attachment-page association. Broken
+links are reported explicitly. Scrolling follows the active message in the left
+pane without changing the reading position. At an email PDF boundary, another
+scroll gesture opens the next/previous email in that same folder and selects it
+in the retained folder tree. Folder ends and nested collections stop automatic
+continuation.
 
-## Choose a reader
+A collection's cover can have one page while its emails live in separate child
+PDFs. The tree lists those PDFs under their folders. Cover-level message metadata
+without a body page is not repeated as a misleading unavailable-page row. When a
+non-collection PDF genuinely lacks a body-page link, selecting the metadata row
+explains that the body page is not identified in that PDF.
 
-| | Full | Even More Lite |
-| --- | --- | --- |
-| Message/folder navigation, PDF pages and embedded assets | Yes | Yes |
-| PDF text search and message filtering | Yes | No |
-| Independent CSV/XMP metadata export | Yes | No |
-| Conversations and Portfolio view | Yes | No |
-| Embedded search indexes and large-archive optimizations | Yes | No |
-| PDF size/page limit | See [full-reader limits](docs/security.md) | 32 MiB / 2,048 pages per PDF |
+Search, filtering controls, CSV/XMP exports, metadata dialogs,
+Conversations, Portfolio view and embedded search indexes are omitted.
+Collection members use their stored filenames; there is no background scan of
+child message subjects. The Full reader retains its independent CSV/XMP export. Viewer Lite is no longer built or published.
 
-Even More Lite uses three adjustable panes for messages, pages and assets.
-Pane-heading chevrons hide the side panes; Show messages and Show files restore
-them above the document. Page controls sit above the PDF. Full offers Portfolio
-view for actual PDF Portfolios; EA-PDF collections retain email navigation.
-The two extensions can be installed together. Viewer Lite is discontinued;
-its last packages remain in the previous release. See the
-[Even More Lite guide](even-more-lite/README.md) for controls and limits.
+Limits: 32 MiB / 2,048 pages per PDF, 16 MiB per decoded asset, 2 MiB metadata
+per document and four embedded levels. Only the current document and its parents
+are retained; returning to a parent releases the child. Incomplete inventories
+show a warning. Application limits do not bound total browser memory.
+Unreadable assets and exceeded limits are reported. Downloads retain the original
+bytes and warn about conflicting declared sizes/checksums. Embedded PDF opening
+requires matching declarations. The source PDF remains unchanged.
+No conformance validation, external URL opening, uploads or analytics.
 
-## Install
-
-**Chromium:** extract the Chromium ZIP. Open `chrome://extensions`, enable
-**Developer mode**, choose **Load unpacked**, and select the folder containing
-`manifest.json`. Click the extension icon to open the reader.
-
-**Firefox:** extract the Firefox ZIP. Open `about:debugging#/runtime/this-firefox`,
-choose **Load Temporary Add-on**, and select `manifest.json`. Repeat after restarting
-Firefox. These beta packages are unsigned.
-
-**Even More Lite web page:** extract the web ZIP to a temporary directory, then run:
-
-```sh
-python3 -m http.server 8765 --bind 127.0.0.1 --directory /tmp/eapdf-viewer-even-more-lite-web
-```
-
-Open `http://127.0.0.1:8765/viewer.html`. Use the directory where you extracted the
-ZIP. Double-clicking `viewer.html` is not supported.
-
-## Use
-
-- Click **Open PDF** or drop a file into the reader.
-- Select a message or folder on the left. Scroll or use page controls to read.
-- Open embedded PDFs, preview supported images/text, or download their original bytes.
-- Use **Parent** to return to the containing PDF.
-- In Full, use search/filtering, independent CSV/XMP exports, Conversations and Portfolio layouts.
-
-Incomplete scans and unsupported files show a warning. A readable PDF has not
-necessarily passed validation. Original files are unchanged. Embedded scripts do not run.
+See INSTALL.txt for local installation. Packages are unsigned beta builds.
 
 ## Build
 
-Before regenerating extension distributables, bump the reader minor version in
-`package.json` and `package-lock.json`, preserving beta status. Rebuild Full and
-Even More Lite together, using one version per regeneration batch. Verification
-rebuilds in that batch retain the chosen version. Keep local installation paths
-stable; reload the extensions and reopen viewer tabs after updating their files.
-
-Use the Node.js/npm versions listed in `package.json`, then run from this folder:
+From this repository's browser-viewer directory:
 
 ```sh
-npm ci
-npm run check
-npm test
-npm run package:beta
 npm run build:even-more-lite
 ```
 
-Packages appear in `releases/`. Even More Lite also includes a standalone source
-ZIP. Shared fixes belong in this repository; regenerate exported source.
-The retained Lite exporter supplies generic hooks and build infrastructure;
-release builds produce Full and Even More Lite packages.
+This builds only Even More Lite using the retained Lite exporter, generic PDF.js
+hooks and maintained overrides in `even-more-lite/overrides`. Shared fixes stay in
+this repository. Browser/web packages, a standalone source ZIP, checksums and
+provenance appear in `releases/`. Nothing is published by this command.
 
-## Tests
+In a standalone source export, with the Node/npm versions in package.json:
 
-`npm test` runs the full unit and Chromium suites. `npm run test:firefox` covers
-Firefox. The independent PDF inspection checks use Python and
-`reference/requirements.txt`; run them with `npm run test:m1`.
-The inspection provenance records exact package versions and source hashes. After
-changing those requirements, install the complete pins in an isolated CPython 3.12
-environment and run `python -B reference/fixtures.py --write`. Review the manifest
-and extracted-record differences, then run `npm run test:m1` and
-`npm run fixtures:check` with that environment on `PATH`. Tests never refresh
-their expected records automatically.
-Browser tests need the corresponding browser and driver installed. Use
-`CHROMIUM_PATH`, `FIREFOX_PATH` and `GECKODRIVER_PATH` when they are outside the default locations.
+```sh
+npm ci --ignore-scripts
+npm run check
+npm run build
+npm test
+npm run test:browser
+npm run test:firefox
+npm run package
+```
 
-For PDF.js API and fixture details, see the [inspection contract](docs/inspection-schema.md).
-
-Build uses TypeScript and PDF.js **6.5.438**.
-PDF.js upstream commit: `0a4153349dc473ba950fc17941c5ca7eda43c1de`.
+Builds need no Java or backend. Packaging uses Python's standard library.
+Use the shared PDF.js patch guide for reproducing the generic hook bundles.
+All fonts, character maps and image/color decoders remain packaged for offline
+rendering. JavaScript and CSS are minified; source maps and the welcome image
+are omitted. The size report compares application bytes, source lines and full
+ZIP sizes separately; PDF.js and its rendering assets dominate the download.

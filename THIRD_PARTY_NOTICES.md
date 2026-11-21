@@ -7,33 +7,19 @@ This file summarizes third-party components bundled into the build or required
 by default runtime workflows. It is an engineering notice file, not legal
 advice.
 
-Both runnable JARs merge upstream notices, license variants and service
+The runnable JARs merge upstream notices, license variants and service
 providers. Project notices and exact DejaVu/Liberation font license notices
-are included under `META-INF/eapdf/`. GUI and CLI shading use fresh thin
-inputs, avoiding duplicate implementation classes from shading a fat JAR
-twice. Redistribution/source/relinking review remains release-specific.
+are included under `META-INF/eapdf/`.
 
 ## Dependency License Summary
 
 ### Apache License 2.0
 
 - `com.drewnoakes:metadata-extractor:2.22.0` (JPEG Exif orientation metadata)
-
-- `com.pff:java-libpst:0.9.3`
-- `org.simplejavamail:outlook-message-parser:1.16.3`
-- `com.github.bbottema:rtf-to-html:2.0.3`
-- `org.apache.poi:poi:6.0.0`
-- `org.apache.poi:poi-ooxml:6.0.0`
+- `org.apache.poi:poi:6.0.0` (Java validator)
 - `org.apache.pdfbox:pdfbox:3.0.8`
 - `org.apache.pdfbox:xmpbox:3.0.8`
-- `com.google.api-client:google-api-client:2.9.2`
-- `com.google.oauth-client:google-oauth-client:1.39.0`
-- `com.google.oauth-client:google-oauth-client-jetty:1.39.0`
-- `com.google.oauth-client:google-oauth-client-java6:1.39.0`
-- `com.google.http-client:google-http-client-gson:2.2.0`
-- `com.google.http-client:google-http-client:2.2.0`
 - `com.google.code.gson:gson:2.15.0`
-- `com.google.apis:google-api-services-gmail:v1-rev20261106-2.9.2`
 
 ### Bouncy Castle License (MIT-style)
 
@@ -56,10 +42,7 @@ twice. Redistribution/source/relinking review remains release-specific.
 ### EPL 2.0 / EDL 1.0 / GPL 2 with Classpath Exception
 
 - `jakarta.mail:jakarta.mail-api:2.1.5`
-
-### EPL 2.0
-
-- `org.eclipse.angus:angus-mail:2.0.5`
+- `org.eclipse.angus:angus-core:2.0.5` supplies the creator’s local MIME runtime.
 
 ### EDL 1.0
 
@@ -90,14 +73,8 @@ version audit and upstream links are in the README's dependency tables.
 
 ### ThinkBox branding assets
 
-Files under [`assets/`](assets/) such as:
-
-- `thinkbox_footer.png`
-- `thinkbox_footer_optimized.png`
-- `thinkbox_footer_scaled.png`
-- `thinkbox_logo.jpg`
-
-should be treated as proprietary unless separately licensed by their owner.
+Earlier EA-PDF outputs may contain proprietary ThinkBox branding. See the
+[proprietary asset notice](third_party_licenses/PROPRIETARY-ASSETS.md).
 
 ### Liberation Sans
 

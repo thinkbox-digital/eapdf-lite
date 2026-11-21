@@ -1,99 +1,80 @@
-# Email to EA-PDF
+# EA-PDF Lite
 
-**Your email—complete, authentic, accessible, structured.**
+Convert local EML files into EA-PDF using the Java command-line creator, check
+the resulting PDFs with the Java command-line validator, and open them in the
+Even More Lite browser reader. The creator accepts an EML file or a directory
+of EML files.
 
-[EA-PDF](docs/reference/EA-PDF-v1.pdf) is a specification for archiving email in PDF/A. It supports individual messages, combined archives and collections, with attachments, email metadata and optional original source messages.
+## Editions
 
-Turn saved emails and mailboxes into PDFs you can read, search and archive.
-Supports **EML, MSG, PST, MBOX and Gmail**.
+- [EA-PDF Main](https://github.com/thinkbox-digital/eapdf) — the full creator, validator and browser readers.
+- **EA-PDF Lite** (this checkout) — an EML command-line creator, a Java command-line validator and the Even More Lite reader.
+- [EA-PDF Secure](https://github.com/thinkbox-digital/eapdf-secure) — the experimental C2PA provenance and PAdES signing and verification edition.
 
-[User guide](https://thinkbox-digital.github.io/eapdf/) · [PDF manual](docs/EA-PDF_User_Manual.pdf) · [Downloads](https://github.com/thinkbox-digital/eapdf/releases/tag/v2.4.0-beta.1)
+## Output profiles
 
-**Beta:** creator and validator 2.4.0-beta.1; Full and Even More Lite readers 1.6.0-beta.1.
-Java applications need **Java 21 or later**. The readers run locally in your browser.
+| Layout | With original source and native attachments | Isolated |
+| --- | --- | --- |
+| One PDF per message | `1s` | `1si` |
+| Multiple messages in one continuous PDF | `1m` | `1mi` |
+| Collection with individually openable message PDFs | `1c` | `1ci` |
 
-## Download
+All six profiles use PDF 2.0 / PDF/A-4f. Isolated profiles omit original message
+sources and native attachment contents. Visible email text, addresses, metadata
+and inline images can still appear in isolated files.
 
-| Tool | What it does |
-| --- | --- |
-| [Creator](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/emailtopdfa-2.4.0-beta.1-gui.jar) | Convert email using a desktop window. |
-| [Command-line creator](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/emailtopdfa-2.4.0-beta.1.jar) | Convert email from a terminal or script. |
-| [Validator](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/eapdf-validator-2.4.0-beta.1.jar) | Check the finished PDFs and save a report. |
-| Full reader: [Chromium](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/eapdf-viewer-1.6.0-beta.1-chromium.zip) / [Firefox](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/eapdf-viewer-1.6.0-beta.1-firefox.zip) | Read messages, folders and attachments; includes Conversations, Portfolio view and larger-archive support. |
-| Even More Lite reader: [Chromium](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/eapdf-viewer-even-more-lite-1.6.0-beta.1-chromium.zip) / [Firefox](https://github.com/thinkbox-digital/eapdf/releases/download/v2.4.0-beta.1/eapdf-viewer-even-more-lite-1.6.0-beta.1-firefox.zip) | Read messages, folders, PDF pages and embedded assets. PDFs up to 32 MiB and 2,048 pages. |
+## Build
 
-The [release page](https://github.com/thinkbox-digital/eapdf/releases/tag/v2.4.0-beta.1)
-also has configuration, examples, the manual, Even More Lite web/source packages and checksums.
-Browser extensions are unsigned; Firefox installation is temporary.
+Download the creator and validator JARs and their SHA-256 checksums from the
+[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.1).
+The commands below build the JARs from source into temporary folders.
 
-## Get started
-
-1. Download the Creator and configuration ZIP, and extract them into one folder.
-2. Start the Creator:
-
-   ```sh
-   java -jar emailtopdfa-2.4.0-beta.1-gui.jar
-   ```
-
-3. Choose your email files, output folder and format, then convert.
-4. Open the finished PDF in the Validator and read its report.
-5. Use either reader to browse messages and attachments. See [installation](browser-viewer/README.md).
-
-Keep the original emails and mailboxes. A PDF does not replace every property of
-the original format. Validation can find problems; it does not prove that every
-aspect of the email or its appearance was preserved.
-
-## Choose an output
-
-| Format | Result |
-| --- | --- |
-| **1s** | One PDF per message, with its source and attachments. |
-| **1m** | Two or more messages in one continuous PDF. |
-| **1c** | A collection containing separately openable message PDFs. |
-| **1si / 1mi / 1ci** | The same layouts with original sources and native attachment contents omitted. |
-
-The isolated formats do **not** anonymize or redact email. Visible text, addresses,
-metadata and inline images can remain. For PST, MBOX and Gmail, retained sources
-are exported messages; keep the original mailbox separately.
-
-All formats use PDF 2.0 / PDF/A-4f. See the [format guide](docs/manual/user-manual.html#basics)
-for details and [examples](examples/) for sample files.
-
-## From the command line
+Use Java 21 and Maven from the checkout root.
 
 ```sh
-java -Xmx2g -jar emailtopdfa-2.4.0-beta.1.jar --jobs 2 --out /tmp/eapdf-output message.eml
+mvn -Deapdf.build.directory=/tmp/eapdf-lite-creator-build verify
+mvn -f validator-desktop/pom.xml -Deapdf.build.directory=/tmp/eapdf-lite-validator-build verify
 ```
 
-For a collection, add `--archive-profile c --archive-output /tmp/eapdf-output/archive_1c.pdf`.
-Use `m`, `mi` or `ci` for the other archive formats. See
-[conversion instructions](docs/CONVERSION_OPERATIONS.md), [Gmail setup](docs/GMAIL.md)
-and [configuration](config/README.md).
+## Convert and validate
 
-## Build and contribute
+Run the creator JAR without arguments to see a quick-start guide and available options.
 
-Use Java 21 and Maven:
+Run the commands from the checkout root. Replace the example input paths with
+your own EML file or directory. Lite Creator generates all six EA-PDF profiles
+with their required document structure. PDF/UA generation, embedded search
+indexes, and PREMIS sidecars are outside the Lite Creator feature set.
 
 ```sh
-mvn -Deapdf.build.directory=/tmp/eapdf-build verify
+java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.1.jar \
+  --jobs 2 --out /tmp/eapdf-lite-output /path/to/message.eml
+
+java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.1.jar \
+  --jobs 2 --out /tmp/eapdf-lite-output --archive-profile c \
+  --archive-output /tmp/eapdf-lite-output/archive_1c.pdf /path/to/eml-directory
+
+java -jar /tmp/eapdf-lite-validator-build/eapdf-validator-2.4.0-beta.1.jar \
+  /tmp/eapdf-lite-output/archive_1c.pdf /tmp/eapdf-lite-output/archive_1c.report.json
 ```
 
-Reader builds need Node.js; see the [reader guide](browser-viewer/README.md#build).
+See the [Java validator guide](validator-desktop/README.md) for report details and exit codes.
 
-[Tests](https://github.com/thinkbox-digital/eapdf/actions/workflows/quality.yml) ·
-[Contribute](CONTRIBUTING.md) · [Project status](docs/PROJECT_STATUS.md) ·
-[Code layout](docs/ARCHITECTURE.md) · [Architecture diagram (PDF)](docs/EA-PDF_Software_Architecture.pdf) · [Report a security problem](SECURITY.md) ·
-[Library packages](docs/PACKAGES.md) · [Privacy](docs/site/privacy.md)
+Use `--omit-source` for `1si`. For batch archives, `--archive-profile m`, `mi`,
+`c` or `ci` selects `1m`, `1mi`, `1c` or `1ci`. Read the validator report for the
+EA-PDF and PDF/A checks, including collection children. Keep your original email
+files.
 
-## Regenerate local outputs
+## Read the PDF
 
-Maintainers can rebuild local samples with `scripts/eapdf-regenerate sample`.
-The `everything` option processes all local inputs. These commands create files
-under `out/` and keep logs separately. Read the
-[regeneration instructions](docs/CONVERSION_OPERATIONS.md#regenerating-local-outputs)
-before running them.
+Even More Lite opens local PDFs and lets you browse messages, folders, pages
+and embedded assets. Its limit is 32 MiB and 2,048 pages per PDF. See the
+[Even More Lite reader instructions](browser-viewer/README.md).
+
+Download the Chromium, Firefox or web package from the
+[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.1).
+Follow the [installation instructions](browser-viewer/INSTALL.txt) for your browser.
 
 ## License
 
-[Apache License 2.0](LICENSE). Bundled libraries have their own licenses;
-see [notices](THIRD_PARTY_NOTICES.md) and the [dependency list](docs/security/runtime-inventory/DEPENDENCY_LICENSES.md).
+[Apache License 2.0](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md)
+for bundled libraries.

@@ -62,17 +62,4 @@ class InternationalHeaderTests {
     Assertions.assertEquals("Résumé", record.subject);
   }
 
-  @Test
-  void mboxMessagesUseTheSameUtf8HeaderDecoder() throws Exception {
-    Path mbox = tempDir.resolve("international.mbox");
-    byte[] raw = message("Résumé", "UTF-8", "Body\r\n");
-    var data = new java.io.ByteArrayOutputStream();
-    data.write("From sender@example.org Thu Oct 22 12:00:00 2026\n".getBytes(StandardCharsets.US_ASCII));
-    data.write(raw);
-    Files.write(mbox, data.toByteArray());
-    var records = MboxReader.readMbox(mbox.toString(), "", List.of(), false);
-    Assertions.assertEquals(1, records.size());
-    Assertions.assertEquals("Résumé", records.get(0).subject);
-    Assertions.assertEquals("José", records.get(0).fromAgents.get(0).name);
-  }
 }

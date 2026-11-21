@@ -33,16 +33,9 @@ final class ConversionProgress {
   }
 
   static ConversionProgress start(String entry, String[] arguments, Path workspace) throws Exception {
-    Map<String, Object> options = switch (entry) {
-      case "eapdf.EmailToPDFA" -> EmailToPDFA.parseArgs(arguments);
-      case "eapdf.GmailDownloadToPdf" -> GmailDownloadToPdf.parseArgs(arguments);
-      case "eapdf.MonthlyFilenameArchiveToPdf" -> MonthlyFilenameArchiveToPdf.parseArgs(arguments);
-      default -> throw Common.fail("Unsupported progress entry point");
-    };
-    String fallback = entry.equals("eapdf.MonthlyFilenameArchiveToPdf")
-        ? Path.of((String) options.getOrDefault("in", MonthlyFilenameArchiveToPdf.DEFAULT_INPUT_DIR)).resolve("_monthly_1m").toString() : "out";
-    String option = entry.equals("eapdf.GmailDownloadToPdf") ? "out-pdf" : "out";
-    Path path = Path.of((String) options.getOrDefault(option, fallback)).toAbsolutePath().normalize().resolve("progress.json");
+    if (!entry.equals("eapdf.EmailToPDFA")) throw Common.fail("Unsupported progress entry point");
+    Map<String, Object> options = EmailToPDFA.parseArgs(arguments);
+    Path path = Path.of((String) options.getOrDefault("out", "out")).toAbsolutePath().normalize().resolve("progress.json");
     var progress = new ConversionProgress(path, UUID.randomUUID().toString(), Instant.now().toString());
     Common.writeAtomically(workspace.resolve("progress-target.json"), JSON.toJson(Map.of(
         "path", path.toString(), "job_id", progress.jobId, "started", progress.started)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -103,22 +96,6 @@ final class ConversionProgress {
         throw Common.fail("Conversion receipts exceed the metadata budget");
       p.creationReceipts.add(receipt); p.receiptBytes += size;
       p.write(true);
-    }
-  }
-
-  static void importReceipts(Path snapshot) throws Exception {
-    var p = active;
-    if (p == null) return;
-    if (Files.size(snapshot) > ProcessingLimits.metadataBytes()) throw Common.fail("Worker progress exceeds the metadata budget");
-    JsonArray receipts = JsonParser.parseString(Files.readString(snapshot)).getAsJsonObject().getAsJsonArray("creation_receipts");
-    synchronized (p) {
-      for (var receipt : receipts) {
-        long size = receipt.toString().length() * 2L;
-        if (size > ProcessingLimits.metadataBytes() - p.receiptBytes)
-          throw Common.fail("Conversion receipts exceed the metadata budget");
-        p.creationReceipts.add(receipt); p.receiptBytes += size;
-      }
-      p.emit(true);
     }
   }
 

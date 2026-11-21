@@ -32,7 +32,9 @@ def replace_file(source, destination):
 
 def main():
     ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
-    version = ET.parse(ROOT/'validator-desktop/pom.xml').findtext('m:version', namespaces=ns)
+    project = ET.parse(ROOT/'validator-desktop/pom.xml')
+    version = project.findtext('m:version', namespaces=ns)
+    main_class = project.findtext('m:properties/m:validator.main.class', namespaces=ns)
     filename = f'eapdf-validator-{version}.jar'
     with tempfile.TemporaryDirectory(prefix='eapdf-validator-package-', dir='/tmp') as scratch:
         scratch = Path(scratch)
@@ -43,7 +45,7 @@ def main():
             if jar.testzip() is not None:
                 raise RuntimeError('Validator ZIP CRC verification failed')
             manifest = jar.read('META-INF/MANIFEST.MF').decode('utf-8').replace('\r\n', '\n')
-            if '\nMain-Class: eapdf.ValidatorGui\n' not in '\n' + manifest:
+            if f'\nMain-Class: {main_class}\n' not in '\n' + manifest:
                 raise RuntimeError('Validator executable manifest is missing or incorrect')
         destination = ROOT/'dist'/filename
         checksum = sha(built)
@@ -58,7 +60,7 @@ def main():
         paths += sorted((ROOT/'validator-desktop/src/main').rglob('*'))
         data = {'date': datetime.now(timezone.utc).isoformat(), 'version': version,
                 'scope': 'Verified executable packaging; large-file acceptance is documented separately.',
-                'main_class': 'eapdf.ValidatorGui', 'java_release': 21,
+                'main_class': main_class, 'java_release': 21,
                 'jars': {destination.name: checksum},
                 'source_hashes': {str(path.relative_to(ROOT)): sha(path) for path in paths if path.is_file()}}
         metadata = scratch/'validator-build.json'

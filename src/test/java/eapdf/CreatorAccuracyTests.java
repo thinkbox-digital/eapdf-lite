@@ -159,32 +159,6 @@ class CreatorAccuracyTests {
     }
   }
 
-  @Test
-  void rtfBodySurvivesExportAndPayloadStaging() throws Exception {
-    EmailRecord record = parse("Fri, 16 Oct 2026 12:00:00 +0000", "text/plain", "Body", "rtf.eml");
-    record.sourceBytes = null;
-    record.associatedFiles.clear();
-    String original = "{\\rtf1\\ansi Original RTF body}";
-    PstReader.populatePstBody(record, "", "", original);
-    Assertions.assertEquals("text/rtf; charset=UTF-8", record.bodyMime);
-    try (PayloadStore store = new PayloadStore()) {
-      store.stage(record);
-      Assertions.assertNull(record.rtfBody);
-      Assertions.assertEquals(original, Common.rtfBody(record));
-      var message = new jakarta.mail.internet.MimeMessage(jakarta.mail.Session.getInstance(new java.util.Properties()),
-          new ByteArrayInputStream(Common.synthesizeEml(record)));
-      var parts = (jakarta.mail.Multipart) message.getContent();
-      boolean found = false;
-      for (int index = 0; index < parts.getCount(); index++) {
-        var part = parts.getBodyPart(index);
-        if (!part.isMimeType("text/rtf")) continue;
-        Assertions.assertEquals(original, new String(part.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
-        found = true;
-      }
-      Assertions.assertTrue(found);
-    }
-  }
-
   void collectStructureRoles(org.apache.pdfbox.cos.COSBase value, java.util.Set<String> roles) {
     if (value instanceof org.apache.pdfbox.cos.COSObject reference) value = reference.getObject();
     if (value instanceof org.apache.pdfbox.cos.COSArray array) {

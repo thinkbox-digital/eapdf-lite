@@ -1,9 +1,5 @@
 name: EA-PDF AI Code Review
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**/*.java'
   workflow_dispatch:
 permissions:
   contents: read

@@ -7,7 +7,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>local</groupId>
-  <artifactId>emailtopdfa</artifactId>
+  <artifactId>emailtopdfa-lite</artifactId>
   <version>2.4.0-beta.1</version>
 
   <properties>
@@ -33,50 +33,17 @@
         <artifactId>fontbox</artifactId>
         <version>3.0.8-eapdf.1</version>
       </dependency>
-      <!-- CVE-2026-49844: override the older API pulled in by POI. -->
-      <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-api</artifactId>
-        <version>2.26.1</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.http-client</groupId>
-        <artifactId>google-http-client-bom</artifactId>
-        <version>2.2.0</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.poi</groupId>
-        <artifactId>poi-scratchpad</artifactId>
-        <version>6.0.0</version>
-      </dependency>
     </dependencies>
   </dependencyManagement>
 
   <dependencies>
 
-    <!-- Legacy email code pages used by real PST and MIME messages. -->
+    <!-- Legacy email code pages used by MIME messages. -->
     <dependency>
       <groupId>com.beetstra.jutf7</groupId>
       <artifactId>jutf7</artifactId>
       <version>1.0.0</version>
     </dependency>
-
-    <!-- PST parsing -->
-    <dependency>
-      <groupId>com.pff</groupId>
-      <artifactId>java-libpst</artifactId>
-      <version>0.9.3</version>
-    </dependency>
-
-    <!-- MSG parsing -->
-    <dependency>
-      <groupId>org.simplejavamail</groupId>
-      <artifactId>outlook-message-parser</artifactId>
-      <version>1.16.3</version>
-    </dependency>
-
 
   <dependency>
     <groupId>jakarta.mail</groupId>
@@ -85,7 +52,7 @@
   </dependency>
   <dependency>
     <groupId>org.eclipse.angus</groupId>
-    <artifactId>angus-mail</artifactId>
+    <artifactId>angus-core</artifactId>
     <version>2.0.5</version>
     <scope>runtime</scope>
   </dependency>
@@ -100,19 +67,6 @@
     <version>2.0.3</version>
     <scope>runtime</scope>
   </dependency>
-
-
-    <!-- Required by outlook-message-parser -->
-    <dependency>
-      <groupId>org.apache.poi</groupId>
-      <artifactId>poi</artifactId>
-      <version>6.0.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.poi</groupId>
-      <artifactId>poi-ooxml</artifactId>
-      <version>6.0.0</version>
-    </dependency>
 
     <dependency>
       <groupId>com.drewnoakes</groupId>
@@ -131,13 +85,6 @@
   <artifactId>openhtmltopdf-pdfbox</artifactId>
   <version>1.1.114-eapdf.1</version>
 </dependency>
-
-    <!-- RTF conversion dependency (fixes CodePage error) -->
-        <dependency>
-      <groupId>com.github.bbottema</groupId>
-      <artifactId>rtf-to-html</artifactId>
-      <version>2.0.3</version>
-    </dependency>
 
     <!-- Detached CMS signatures for outer EA-PDF outputs. -->
     <dependency>
@@ -160,52 +107,10 @@
     </dependency>
 
     <dependency>
-      <groupId>com.google.api-client</groupId>
-      <artifactId>google-api-client</artifactId>
-      <version>2.9.2</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.oauth-client</groupId>
-      <artifactId>google-oauth-client</artifactId>
-      <version>1.39.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.oauth-client</groupId>
-      <artifactId>google-oauth-client-jetty</artifactId>
-      <version>1.39.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.oauth-client</groupId>
-      <artifactId>google-oauth-client-java6</artifactId>
-      <version>1.39.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.http-client</groupId>
-      <artifactId>google-http-client-gson</artifactId>
-      <version>2.2.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.apis</groupId>
-      <artifactId>google-api-services-gmail</artifactId>
-      <version>v1-rev20261106-2.9.2</version>
-    </dependency>
-
-    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <version>6.1.3</version>
       <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.http-client</groupId>
-      <artifactId>google-http-client</artifactId>
-      <version>2.2.0</version>
     </dependency>
 
     <dependency>
@@ -243,13 +148,6 @@
     <testResources>
       <testResource>
         <directory>src/test/resources</directory>
-      </testResource>
-      <testResource>
-        <directory>in</directory>
-        <targetPath>eapdf/email</targetPath>
-        <includes>
-          <include>test.pst</include>
-        </includes>
       </testResource>
     </testResources>
     <plugins>
@@ -316,30 +214,12 @@
         </configuration>
         <executions>
           <execution>
-            <id>shade-gui</id>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <createDependencyReducedPom>false</createDependencyReducedPom>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>gui</shadedClassifierName>
-              <transformers combine.children="append">
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>eapdf.EapdfGui</mainClass>
-                </transformer>
-              </transformers>
-            </configuration>
-          </execution>
-          <execution>
             <id>shade-cli</id>
             <phase>package</phase>
             <goals>
               <goal>shade</goal>
             </goals>
             <configuration>
-              <createDependencyReducedPom>false</createDependencyReducedPom>
               <transformers combine.children="append">
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>eapdf.EmailToPDFA</mainClass>

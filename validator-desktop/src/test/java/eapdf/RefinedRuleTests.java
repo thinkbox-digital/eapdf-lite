@@ -209,17 +209,6 @@ class RefinedRuleTests {
     }
   }
 
-  @Test void specificationShowsCurrentAssertionsAndFindingShowsAnOccurrenceResult() {
-    String specification = SpecificationReferences.text("SOURCE_MEDIATYPE_PARAMETERS_MATCH");
-    assertTrue(specification.contains("This rule checks:"));
-    assertTrue(specification.contains("Stored Mail_MediaTypeParameters"));
-    assertTrue(specification.contains("Strength: SHALL")); assertTrue(specification.contains("Evidence needed:"));
-    assertTrue(specification.contains("Prerequisite:")); assertTrue(specification.contains("Required" ) || specification.contains("preserve"));
-    var group = ValidatorGui.groupFindings(List.of(new ValidatorGui.Finding("PASS", "ASSET_NUMBERMESSAGES_TYPE", "Integer syntax was checked.", "declared=2"))).getFirst();
-    assertTrue(group.detailText().contains("Other occurrences of this rule may have separate results"));
-    assertTrue(group.detailText().contains("Integer syntax was checked.")); assertTrue(group.detailText().contains("declared=2"));
-  }
-
   @Test void sourceValueFailureDoesNotInvalidateItsTextTypeOrSourceCoverage() throws Exception {
     try (var document = Loader.loadPDF(SAMPLE.toFile())) {
       var xml = metadata(document); fieldElement(firstRecord(xml, "email"), "Subject").setTextContent("Wrong subject"); metadata(document, xml);

@@ -94,15 +94,14 @@ final class OutputTransaction implements AutoCloseable {
   }
 
   static void publish(Path manifest, Path directory) throws Exception {
-    publish(manifest, directory, new PstJobBudget());
+    publish(manifest, directory, new InputJobBudget());
   }
 
-  static void publish(Path manifest, Path directory, PstJobBudget budget) throws Exception {
+  static void publish(Path manifest, Path directory, InputJobBudget budget) throws Exception {
     long manifestLimit = budget.setting("eapdf.maxMetadataBytes", "EAPDF_MAX_METADATA_BYTES", ProcessingLimits.messageBytes());
     if (Files.size(manifest) > manifestLimit) throw Common.fail("Output manifest exceeds the metadata limit");
     Entry[] entries = new Gson().fromJson(Files.readString(manifest), Entry[].class);
     if (entries == null) throw new IOException("Missing output manifest entries");
-    // A collection can publish its PDF plus finding-aid PDF, spreadsheet and PREMIS sidecars.
     long total = 0;
     var destinations = new java.util.HashSet<Path>();
     ConversionProgress.begin("verifying_outputs", entries.length, "files");

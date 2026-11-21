@@ -25,7 +25,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
 import org.junit.jupiter.api.Assertions;
 
 final class TestSupport {
-  static final List<String> INPUT_FIXTURES = List.of("sample.eml", "sample.mbox", "test.pst");
+  static final List<String> INPUT_FIXTURES = List.of("sample.eml");
 
   private TestSupport() {}
 
@@ -47,8 +47,13 @@ final class TestSupport {
   }
 
   static Path fixturePath(String filename) throws IOException {
-    var resource = TestSupport.class.getResource("/eapdf/email/" + filename);
-    if (resource == null) throw new IOException("Missing test resource: eapdf/email/" + filename);
+    return fixturePath("email", filename);
+  }
+
+  static Path fixturePath(String directory, String filename) throws IOException {
+    String location = "/eapdf/" + directory + "/" + filename;
+    var resource = TestSupport.class.getResource(location);
+    if (resource == null) throw new IOException("Missing test resource: " + location);
     if ("file".equals(resource.getProtocol())) {
       try {
         return Path.of(resource.toURI());

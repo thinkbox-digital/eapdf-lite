@@ -38,11 +38,9 @@ The renderer selects patched `PdfAConformance.PDFA_4_A` and an sRGB output profi
 Despite that API enum's name, the patch emits **base PDF/A-4**, without an `A`
 conformance value, and writes a PDF 2.0 header. It does not supply 4f attachments.
 
-The patched `usePdfUaAccessibility(tagged, 2)` supplies PDF/UA-2 structures for
-existing accessibility/header tagging paths. The public configuration switch
-`accessibility.addPdfUaFeatures` continues to control final PDF/UA identification;
-no CLI arguments are added. Existing renderer tagging for EA-PDF headers remains
-available when the optional accessibility setting is disabled.
+The patched renderer API `usePdfUaAccessibility(true, 2)` generates PDF 2.0
+marked content and a structure tree for EA-PDF assembly. Lite Creator replaces
+the intermediate renderer metadata with final EA-PDF and PDF/A-4f identification.
 
 The final PDFBox assembly remains responsible for EA-PDF and PDF/A-4f metadata,
 associated files, DParts, outlines, logical wrappers, namespace mappings and

@@ -17,19 +17,6 @@ class SmallInputReliabilityTests {
     return EmlReader.readRfc822Bytes(bytes, "edge.eml", "edge.eml", "", List.of(), false);
   }
 
-  @Test void nativeMsgAttachmentOrderDoesNotDependOnObjectHashCodes() throws Exception {
-    // Check repeatability without inventing a required Outlook display order.
-    List<String> first = null;
-    for (int repetition = 0; repetition < 12; repetition++) {
-      var record = MsgReader.readMsg("in/EmailWith2Attachments.msg", "", List.of(), false);
-      var names = record.associatedFiles.stream().filter(file -> file.emailAttachment).map(file -> file.filename).toList();
-      assertEquals(java.util.Set.of("Installatie handleiding.docx", "Installatiehandleiding S&I Agro.xlsx"), java.util.Set.copyOf(names));
-      assertEquals(2, names.size());
-      if (first == null) first = names;
-      else assertEquals(first, names);
-    }
-  }
-
   @Test void invalidUtf8MutationCorpusRetainsOriginalAndReportsEveryRecovery() throws Exception {
     for (int value = 0x80; value <= 0xff; value++) {
       byte[] raw = TextDecodeWarningTests.message("text/plain; charset=UTF-8", new byte[]{'A', (byte)value, 'Z'});
