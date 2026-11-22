@@ -135,8 +135,8 @@
     "src/icons/icon-48.png": "7f7b8a3ff4dfcd07a99090ae954b559e147c382bbc4309bdcb1b2f2ef14d7afa",
     "src/icons/viewer.svg": "fe6cf68170264464e4f44595893f7b614a8120f8a42eba7d3a7853ca9dd12933",
     "vendor/sources/liberation-fonts-1.07.4.tar.gz": "ad98b7498dc2992f7f0868f79b65ce4a720a3acdb63ab3f1f1cb6881117a5406",
-    "package.json": "06ed08dbe7db5b5c48d533273269290158ff6235848d4900f31a5cd46b73337e",
-    "package-lock.json": "97c06ea173d6b820f19d5b53aeadc32308c98cfaa7962126d25a98a65df33372",
+    "package.json": "cfadf484775f0e759c2001aa89a0311a75908998de1c3798211aee65288dd355",
+    "package-lock.json": "f76e1bbc348720338fcaa91701bc3740fd770b696573fbe202681c0f7d8aeda6",
     "tests/fixtures/ordinary.pdf": "c50f5aa1a2a6e50fe32908ede439cdc42ea93efadbd7a25874fd12b0943faad9",
     "tests/fixtures/issue16880.pdf": "762c9801a97104e209e2a9d66285a1136cca57d7e2fb5996a4625e36b4f388ed",
     "tests/fixtures/RTL-LIGATURES.md": "f7826cdda5532867d0dc536befdb9b6bd3f84f2cac18f5d082b718ded5a3c7da",
@@ -150,7 +150,7 @@
     "scripts/prepare-hooks.mjs": "4f9284d7f9083ddc658efa3677b3ffe07cec4af9ddd9ad176c194f1adff89114",
     "scripts/rebuild-pdfjs.mjs": "e2529a7d91765cc00a439b71ba051f60d278c84340dec43cba4ee3eade7173e6",
     "scripts/verify-hooks.mjs": "e0d0f0e14988a58f4da7d63a3db9a018f086cdaee2c2922201f866a313ab94ef",
-    "scripts/build.mjs": "129f29831eda8793d3a85459465b540fd8f479143519ab604d8d778ec354c69a",
+    "scripts/build.mjs": "27f4e14aa72507f1e65314a6b95802e6df99e03cc24a48b188c38e28ce55c54d",
     "scripts/package.mjs": "376689680e348724b21eb30a10ac7e369696246f4c86fb4a48b192580d3a6dfc",
     "tests/core-hooks.test.mjs": "4ec2d251249de4092d3954604467b80e36aaade4de03c2a009d45599f62c02f4",
     "tests/assets-hooks.test.mjs": "85188fda34c444fe757a8507800b34d064d5e016a18b44b09809a2efb7f5d2bf",
@@ -176,6 +176,16 @@
     "vendor/pdfjs-patched/pdf.mjs": "8b40947296f939f61f1b042fd805a73fd0e6f5f3b056bffed6d9ec0e07a2a095",
     "vendor/pdfjs-patched/pdf.worker.mjs": "1dd99ee882aa80e28c7c7a2142d14d8c9f1fc8dac406a4ae42c4c92dc227d3ff",
     "vendor/pdfjs-patches/manifest.json": "c105a6a386e222158a9bdc430f068188ff2ab6ceba78a841a833bab3f6c6da70",
-    ".gitignore": "7f39a740a69d5ac37ac0274a9c5d8e9c65d8baad1fcbccc405ecac9eac3c19c7"
+    ".gitignore": "9f50799ab52052e6db6ebedbf71c654e4a3e2b8df5455b9aee051a888af6b592",
+    "scripts/publish-viewer-builds.mjs": "c5fb607bf67c2b33958e7dfd9aa059c8aaf78c58ae8b426def5308690b27a50e",
+    "tests/publish-viewer-builds.test.mjs": "a355ff18d9c395002a22461d0fdacff906e725e387bf8327faeacfcb7f5ed178"
+  },
+  "editionOverrides": {
+    "package.json": "06ed08dbe7db5b5c48d533273269290158ff6235848d4900f31a5cd46b73337e",
+    "package-lock.json": "97c06ea173d6b820f19d5b53aeadc32308c98cfaa7962126d25a98a65df33372",
+    "scripts/build.mjs": "129f29831eda8793d3a85459465b540fd8f479143519ab604d8d778ec354c69a",
+    ".gitignore": "7f39a740a69d5ac37ac0274a9c5d8e9c65d8baad1fcbccc405ecac9eac3c19c7",
+    "scripts/publish-viewer-builds.mjs": null,
+    "tests/publish-viewer-builds.test.mjs": null
   }
 }
