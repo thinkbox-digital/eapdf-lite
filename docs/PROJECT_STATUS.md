@@ -7,11 +7,13 @@ validated children. GitHub publication through the acceptance workflow uses the
 packages and checksums from the successful job.
 
 This Lite checkout ships an EML command-line creator, a Java command-line
-validator and the Even More Lite reader. See the [Lite quick start](../README.md)
-for commands. Lite publishes creator and validator **2.4.0-beta.1** with
-Even More Lite **1.7.0**. The release notes below describe EA-PDF Main.
+validator, the Even More Lite reader, and a desktop viewer. See the
+[Lite quick start](../README.md) for commands. Lite publishes creator and
+validator **2.4.0-beta.4** with Even More Lite **1.9.0** and Desktop Viewer
+**0.9.0**. The release notes below describe EA-PDF Main.
 
-[Lite downloads](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.1)
+[Lite downloads](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.4) ·
+[Lite release notes](releases/2.4.0-beta.4.md)
 
 Lite Creator supports all six EA-PDF profiles for local EML. It uses Angus
 Core for MIME processing. PDF/UA output, embedded search indexes and PREMIS

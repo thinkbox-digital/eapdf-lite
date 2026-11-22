@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
@@ -40,7 +39,6 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
-import org.apache.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
@@ -377,8 +375,8 @@ final class PdfCollectionSupport {
       af.dataPath = member.pdfPath;
       af.storedSize = member.pdfSize();
       String checksum = member.pdfPath == null ? Common.md5Hex(member.pdfBytes) : Common.digestHex(member.pdfPath, "MD5");
-      PDComplexFileSpecification embedded = addEmbeddedPlan(doc, afArray, nameMap, normalizedNames, nameTreeKey, member.filename, "application/pdf", "Data", checksum, af,
-          af.description, collectionItem);
+      PDComplexFileSpecification embedded = addEmbeddedPlan(doc, afArray, nameMap, normalizedNames,
+          nameTreeKey, member.filename, "application/pdf", "Data", checksum, af, collectionItem);
       if (message != null) childFiles.put(message, embedded);
       if (debug) System.out.println("[debug] collection member embedded: " + member.filename + " messages=" + member.records.size());
     }
@@ -386,7 +384,7 @@ final class PdfCollectionSupport {
     for (PdfAttachmentSupport.ArchiveEmbeddedFilePlan plan : PdfMailWriter.buildArchiveEmbeddedFilePlans(records)) {
       if (!"Source".equals(plan.relationship) && !plan.file.sourceSetMember) continue;
       addEmbeddedPlan(doc, afArray, nameMap, normalizedNames, plan.filename, plan.filename, plan.mime, plan.relationship,
-          plan.checksumMd5, plan.file, plan.file.description, null);
+          plan.checksumMd5, plan.file, null);
     }
 
     efs.setNames(nameMap);
@@ -449,7 +447,7 @@ final class PdfCollectionSupport {
     root.setName(COSName.TYPE, "Folder");
     root.setInt(COSName.getPDFName("ID"), 0);
     root.setString(COSName.NAME, Common.safeCollectionLabel("Collection", "Collection"));
-    root.setString(COSName.getPDFName("ModDate"), pdfDateNow());
+    root.setDate(COSName.MOD_DATE, Calendar.getInstance(Locale.ROOT));
     long nextId = Math.max(0, folders.stream().mapToLong(folder -> folder.id).max().orElse(0)) + 1;
     COSObject rootObj = new COSObject(root);
     Map<String, PdfCollectionSupport.CollectionFolder> messageFolders = new LinkedHashMap<>();
@@ -474,9 +472,9 @@ final class PdfCollectionSupport {
           node.setInt(COSName.getPDFName("ID"), group == null ? (int) nextId++ : group.id);
           node.setString(COSName.NAME, component);
           node.setItem(COSName.PARENT, parent);
-          String now = pdfDateNow();
-          node.setString(COSName.getPDFName("CreationDate"), now);
-          node.setString(COSName.getPDFName("ModDate"), now);
+          Calendar now = Calendar.getInstance(Locale.ROOT);
+          node.setDate(COSName.CREATION_DATE, now);
+          node.setDate(COSName.MOD_DATE, now);
           int messages = group == null ? 0 : group.messageCount;
           long size = group == null ? 0 : group.totalSizeBytes;
 
@@ -505,26 +503,6 @@ final class PdfCollectionSupport {
     return rootObj;
   }
 
-  private static String pdfDateNow() {
-    Calendar now = Calendar.getInstance();
-    int offsetMinutes = now.getTimeZone().getOffset(now.getTimeInMillis()) / (60 * 1000);
-    char sign = offsetMinutes >= 0 ? '+' : '-';
-    int abs = Math.abs(offsetMinutes);
-    int hours = abs / 60;
-    int minutes = abs % 60;
-    return String.format(Locale.ROOT,
-        "D:%04d%02d%02d%02d%02d%02d%c%02d'%02d'",
-        now.get(Calendar.YEAR),
-        now.get(Calendar.MONTH) + 1,
-        now.get(Calendar.DAY_OF_MONTH),
-        now.get(Calendar.HOUR_OF_DAY),
-        now.get(Calendar.MINUTE),
-        now.get(Calendar.SECOND),
-        sign,
-        hours,
-        minutes);
-  }
-
   private static COSDictionary collectionSchemaField(String displayName, String subtype) {
     COSDictionary field = new COSDictionary();
     field.setString(COSName.N, displayName);
@@ -535,44 +513,16 @@ final class PdfCollectionSupport {
 
   private static PDComplexFileSpecification addEmbeddedPlan(PDDocument doc, COSArray afArray, Map<String, PDComplexFileSpecification> nameMap, Set<String> normalizedNames,
                                       String nameTreeKey, String filename, String mime, String relationship, String checksumMd5, AssociatedFile file,
-                                      String description, COSDictionary collectionItem) throws Exception {
+                                      COSDictionary collectionItem) throws IOException {
     if (!file.hasData() || file.size() == 0) return null;
     var prefix = java.util.regex.Pattern.compile("^<\\d+>").matcher(nameTreeKey);
     String folderPrefix = !nameTreeKey.equals(filename) && prefix.find() ? prefix.group() : "";
     String key = PdfAttachmentSupport.reserveAttachmentKey(normalizedNames,
         folderPrefix + Common.collectionFilename(nameTreeKey.substring(folderPrefix.length())));
-    PDComplexFileSpecification fs = new PDComplexFileSpecification();
     String storedName = key.substring(folderPrefix.length());
-    fs.setFile(storedName);
-    fs.setFileUnicode(storedName);
-
-    PDEmbeddedFile ef;
-    try (var data = file.openData()) {
-      ef = new PDEmbeddedFile(doc, data, COSName.FLATE_DECODE);
-    }
-    PdfAttachmentSupport.setEmbeddedMediaType(ef, mime);
-    ef.setSize(file.size());
-    Calendar now = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    ef.setCreationDate(now);
-    ef.setModDate(now);
-    PdfAttachmentSupport.setEmbeddedChecksum(ef, checksumMd5);
-
-    COSDictionary efd = ef.getCOSObject();
-
-    COSDictionary params = (COSDictionary)efd.getDictionaryObject(COSName.PARAMS);
-    if (params == null) {
-      params = new COSDictionary();
-      efd.setItem(COSName.PARAMS, params);
-    }
-    params.setInt(COSName.SIZE, file.size());
-
-    fs.setEmbeddedFile(ef);
-    fs.setEmbeddedFileUnicode(ef);
-
-    COSDictionary fsd = fs.getCOSObject();
-    fsd.setName(COSName.getPDFName("AFRelationship"), relationship);
-    if (!Common.nz(description).isBlank()) fsd.setString(COSName.DESC, description);
-    if (collectionItem != null) fsd.setItem(COSName.getPDFName("CI"), collectionItem);
+    PDComplexFileSpecification fs = PdfAttachmentSupport.embedAssociatedFile(
+        doc, file, storedName, mime, relationship, checksumMd5);
+    if (collectionItem != null) fs.getCOSObject().setItem(COSName.getPDFName("CI"), collectionItem);
 
     nameMap.put(key, fs);
     afArray.add(fs.getCOSObject());

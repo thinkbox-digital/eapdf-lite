@@ -149,30 +149,6 @@ class SpecRepairTests {
     Assertions.assertNotNull(error.getCause());
   }
 
-  @Test void inputSourceDescriptionsAreConsistent() {
-    var expected = Map.of("eml", "Original EML source", "msg", "Original Outlook MSG source",
-        "mbox", "Email source extracted from MBOX", "pst", "Email source exported from PST",
-        "gmail", "Original Gmail email source");
-    expected.forEach((type, description) -> {
-      var record = new EmailRecord();
-      record.sourceType = type;
-      Assertions.assertEquals(description, Common.sourceDescription(record));
-    });
-  }
-
-  @Test void mailboxExportBoundaryIsExplicitInPdfAndPremisDescriptions() throws Exception {
-    for (String type : List.of("pst", "mbox")) {
-      EmailRecord record = record("text/plain", "Exported body");
-      record.sourceType = type;
-      record.sourcePath = "original." + type;
-      Assertions.assertEquals(type.equals("mbox") ? "Email source extracted from MBOX" : "Email source exported from PST", Common.sourceDescription(record));
-      try (var document = Loader.loadPDF(create(record))) {
-        String metadata = TestSupport.metadataXml(document);
-        Assertions.assertTrue(metadata.contains("preprocessing:"));
-        Assertions.assertTrue(metadata.contains("not embedded"));
-      }
-    }
-  }
 
   @Test void unusedInlineImagesAreNeverDrawnAtInventedPositions() throws Exception {
     EmailRecord record = record("text/html", "<p>Only visible text</p>");

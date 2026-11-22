@@ -14,7 +14,6 @@ public class EmailToPDFA {
     try (Common.JobReport job = Common.beginJob()) {
       Map<String,Object> opt = parseArgs(args);
       EapdfConfig.get().requireCreator();
-      PdfSigning.preflight();
       String in = (String)opt.get("in");
       if (in == null) throw Common.fail("missing input path");
       String outDir = (String)opt.getOrDefault("out", "out");
@@ -53,7 +52,7 @@ public class EmailToPDFA {
 
   private static void printHowTo() {
     String command = "java -jar emailtopdfa-lite-" + Common.projectVersion() + ".jar";
-    System.out.print("""
+    System.out.printf("""
         EA-PDF Lite Creator (Java 21)
         Convert a local .eml file or a folder of .eml files to EA-PDF.
 
@@ -79,7 +78,7 @@ public class EmailToPDFA {
           --icc <file.icc>             Select a custom ICC color profile
           --debug                      Write debug files
           --debug-dir <folder>         Folder for --debug files (default: _debug inside the output folder)
-        """.formatted(command));
+        """, command);
   }
 
   static Map<String,Object> parseArgs(String[] args) {
@@ -178,7 +177,6 @@ public class EmailToPDFA {
       Path destination = Path.of(archiveOutput);
       for (String input : inputs) OutputTransaction.protectInput(destination, Path.of(input));
       OutputTransaction.protectConfiguredInputs(destination, fontPath, iccPath);
-      OutputTransaction.allowReplacement(destination);
     }
     List<EmailRecord> all = new ArrayList<>();
     for (List<EmailRecord> recs : readManyForArchive(inputs, globalId, archiveEmails, debug)) {
@@ -340,6 +338,7 @@ public class EmailToPDFA {
       }
       filename = stem + suffix + ".pdf";
     }
+    OutputTransaction.reserveNewDestination(Paths.get(outDir, filename));
     return filename;
   }
 

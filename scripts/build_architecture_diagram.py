@@ -30,13 +30,20 @@ def build(path):
     reader = json.loads((ROOT / 'browser-viewer/package.json').read_text())
     java = dependencies(ROOT / 'pom.xml')
     vera = dependencies(ROOT / 'validator-desktop/pom.xml')
+    desktop_path = ROOT / 'desktop-viewer/pom.xml'
+    desktop = dependencies(desktop_path)
+    desktop_properties = ET.parse(desktop_path).getroot().find('m:properties', NS)
+    desktop_version = desktop_properties.findtext('m:revision', namespaces=NS)
+    javafx_version = desktop_properties.findtext('m:javafx.version', namespaces=NS)
+    html_lock = json.loads((ROOT / 'third_party/openhtmltopdf/lock.json').read_text())
+    html_patches = len(html_lock['patches']) + bool(html_lock.get('layout_guard'))
     rules = len(json.loads((ROOT / 'validator_rule_text.json').read_text()))
     pdfmetrics.registerFont(TTFont('Arch', str(ROOT / 'src/main/resources/assets/DejaVuSans.ttf')))
     pdfmetrics.registerFont(TTFont('ArchBold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
     pdf = canvas.Canvas(str(path), pagesize=(1200, 750), invariant=1, pageCompression=1)
     pdf.setTitle('EA-PDF Lite Software Architecture')
     pdf.setAuthor('Thinkbox.DIGITAL')
-    pdf.setSubject('Lite creator, standalone validator, and Even More Lite reader')
+    pdf.setSubject('Lite creator, standalone validator, browser and desktop viewers')
     pdf.setCreator('EA-PDF architecture diagram builder')
     pdf.setKeywords('EA-PDF, architecture, creator, validator, viewer, Even More Lite')
     blue = HexColor('#163f58'); ink = HexColor('#233b4a'); border = HexColor('#cbd9e2')
@@ -70,23 +77,23 @@ def build(path):
         ('Java 21+  |  Command line', version),
         ('Checks', f'{rules} project rule definitions; PDF/A validation; selected ISO 32005 structure rules.'),
         ('Scope', 'Embedded PDFs, attachments and source consistency. Reports PASS, FAIL or INCOMPLETE. No server required.')])
-    card(xs[2], 418, width, 244, 'EVEN MORE LITE READER', [
-        ('Chromium and Firefox  |  Local files', reader['version']),
-        ('Navigate', 'Three adjustable panes for messages and folders, PDF pages and embedded assets.'),
-        ('Document limits', '32 MiB and 2,048 pages per local PDF.')])
+    card(xs[2], 418, width, 244, 'EA-PDF VIEWERS', [
+        ('Even More Lite browser reader', f"{reader['version']} | Chromium, Firefox and standalone web package."),
+        ('Desktop Viewer', f'{desktop_version} | Java 21+ application for local PDFs.'),
+        ('Navigate', 'Browse messages and folders, PDF pages and embedded files.')])
 
     card(xs[0], 122, width, 274, 'CREATOR LIBRARIES', [
-        ('PDF creation and metadata', f"PDFBox / XMPBox {java['pdfbox']}; FontBox {java['fontbox']}. OpenHTMLtoPDF {java['openhtmltopdf-pdfbox']} with four maintained patches."),
+        ('PDF creation and metadata', f"PDFBox / XMPBox {java['pdfbox']}; FontBox {java['fontbox']}. OpenHTMLtoPDF {java['openhtmltopdf-pdfbox']} with {html_patches} maintained patches."),
         ('Email and content', f"Jakarta Mail / Angus Mail, jsoup {java['jsoup']}, jutf7 and metadata-extractor {java['metadata-extractor']}."),
-        ('Other integrations', f"Bouncy Castle {java['bcpkix-jdk18on']}; Gson {java['gson']}.")])
+        ('Configuration and evidence', f"Gson {java['gson']}; batch manifests and isolated worker directories.")])
     card(xs[1], 122, width, 274, 'VALIDATION LIBRARIES', [
         ('veraPDF engines and project checks', f"Core / XMP {vera['core']}; parser {vera['parser']}; PDF model {vera['pdf-model']}; validation model {vera['validation-model']}. Local storage/resource patches remain."),
         ('PDF and email inspection', f"PDFBox {vera['pdfbox']}; FontBox {vera['fontbox']}; POI {vera['poi']}; Gson {vera['gson']}; Jakarta Mail / Angus Mail; project EA-PDF checks."),
         ('Optional development tool', 'Python CLI for regression tests and diagnostics. The web workbench and its deployment code are removed.')])
-    card(xs[2], 122, width, 274, 'READER FOUNDATION', [
-        ('PDF engine and shared hooks', f"PDF.js {reader['dependencies']['pdfjs-dist']}. Generic hooks expose document parts / DPM, associated files, metadata and collection membership."),
-        ('Application layer', f"TypeScript {reader['devDependencies']['typescript']}; browser extensions. The standalone export shares maintained source with the Full reader."),
-        ('Build tools only', f"Node {reader['engines']['node']}; npm {reader['engines']['npm']}; Playwright {reader['devDependencies']['playwright']}. No Java or Python needed by the extensions.")])
+    card(xs[2], 122, width, 274, 'VIEWER LIBRARIES', [
+        ('Browser reader', f"PDF.js {reader['dependencies']['pdfjs-dist']} with document parts and attachment hooks; TypeScript {reader['devDependencies']['typescript']}."),
+        ('Desktop Viewer', f"PDFViewFX {desktop['pdfviewfx']}; JavaFX {javafx_version}; PDFBox {desktop['pdfbox']}."),
+        ('Browser build tools', f"Node {reader['engines']['node']}; npm {reader['engines']['npm']}; Playwright {reader['devDependencies']['playwright']}.")])
 
     pdf.setStrokeColor(blue); pdf.setFillColor(blue); pdf.setLineWidth(1.5)
     for x in xs:

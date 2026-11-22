@@ -95,7 +95,7 @@ class AssociatedFile {
 }
 
 class EmailRecord {
-  String sourceType, sourcePath, folderPath, messageId, subject, from, to, cc, bcc, date, rawDateHeader;
+  String sourcePath, folderPath, messageId, subject, from, to, cc, bcc, date, rawDateHeader;
   String rawFrom, rawTo, rawCc, rawBcc, rawReplyTo;
   List<String> inReplyTo = new ArrayList<>();
   List<String> references = new ArrayList<>();
@@ -109,7 +109,6 @@ class EmailRecord {
   String bodyMime;
   String bodyBaseUri = "";
   List<String> bodyLocationScopes = List.of();
-  transient Map<Object, List<String>> mimePartScopes;
   transient Map<String, AssociatedFile> nativeLocationResources = new LinkedHashMap<>();
   String headerTagMarker;
   java.nio.file.Path textDataPath, htmlDataPath, rtfDataPath;
@@ -145,7 +144,7 @@ class BodyChoice {
   String mime = "";
   String plainMime = "";
   String baseUri = "";
-  List<String> locationScopes = List.of();
+  EmlReader.LocationScope locationScope;
   boolean unsupported;
   List<String> renderWarnings = new ArrayList<>();
 }

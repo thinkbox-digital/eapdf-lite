@@ -90,20 +90,20 @@ class RemainingWorkflowTests {
   void configurationRejectsUnsupportedVersionsAndWrongTypesAndWarnsForUnknownKeys() throws Exception {
     Path config = tempDir.resolve("config.json");
     for (String json : List.of("[]", "{\"configVersion\":2}", "{\"configVersion\":1.5}",
-        "{\"signing\":{\"enabled\":\"false\"}}", "{\"signing\":true}")) {
+        "{\"validateOnCreation\":\"false\"}", "{\"creator\":true}")) {
       Files.writeString(config, json);
       Assertions.assertThrows(RuntimeException.class, () -> EapdfConfig.load(config));
     }
-    Files.writeString(config, "{\"configVersion\":1,\"signing\":{\"enabled\":false,\"typo\":true},\"searchIndex\":{\"enabled\":true}}");
+    Files.writeString(config, "{\"configVersion\":1,\"validateOnCreation\":false,\"typo\":true,\"searchIndex\":{\"enabled\":true}}");
     ByteArrayOutputStream warnings = new ByteArrayOutputStream();
     PrintStream previous = System.err;
     try {
       System.setErr(new PrintStream(warnings, true, StandardCharsets.UTF_8));
-      Assertions.assertFalse(EapdfConfig.load(config).signing.enabled);
+      Assertions.assertFalse(EapdfConfig.load(config).validateOnCreation);
     } finally {
       System.setErr(previous);
     }
-    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("signing.typo"));
+    Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("unknown configuration setting: typo"));
     Assertions.assertTrue(warnings.toString(StandardCharsets.UTF_8).contains("unknown configuration setting: searchIndex"));
   }
 

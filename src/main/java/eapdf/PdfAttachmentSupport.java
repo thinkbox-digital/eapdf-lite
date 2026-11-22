@@ -8,6 +8,7 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -86,7 +87,7 @@ final class PdfAttachmentSupport {
 
     COSDictionary fsd = fs.getCOSObject();
     fsd.setName(COSName.getPDFName("AFRelationship"), relationship);
-    fsd.setString(COSName.DESC, description);
+    fs.setFileDescription(description);
 
     if (addFirst) {
       Map<String, PDComplexFileSpecification> reordered = new LinkedHashMap<>();
@@ -106,6 +107,29 @@ final class PdfAttachmentSupport {
     names.setEmbeddedFiles(efs);
     cat.setNames(names);
     return fs;
+  }
+
+  static PDComplexFileSpecification embedAssociatedFile(PDDocument doc, AssociatedFile file, String filename,
+      String contentType, String relationship, String checksum) throws IOException {
+    PDEmbeddedFile embedded;
+    try (InputStream data = file.openData()) {
+      embedded = new PDEmbeddedFile(doc, data, COSName.FLATE_DECODE);
+    }
+    setEmbeddedMediaType(embedded, contentType);
+    embedded.setSize(file.size());
+    Calendar now = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.ROOT);
+    embedded.setCreationDate(now);
+    embedded.setModDate(now);
+    setEmbeddedChecksum(embedded, checksum);
+
+    PDComplexFileSpecification spec = new PDComplexFileSpecification();
+    spec.setFile(filename);
+    spec.setFileUnicode(filename);
+    spec.setEmbeddedFile(embedded);
+    spec.setEmbeddedFileUnicode(embedded);
+    spec.getCOSObject().setName(COSName.getPDFName("AFRelationship"), relationship);
+    if (!Common.nz(file.description).isBlank()) spec.setFileDescription(file.description);
+    return spec;
   }
 
   static void rewriteAttachmentLaunchLinks(PDDocument doc, Map<String, PDComplexFileSpecification> filesByToken) throws Exception {
@@ -286,7 +310,7 @@ static List<ArchiveEmbeddedFilePlan> buildArchiveEmbeddedFilePlans(List<EmailRec
       af.mime = Common.nz(r.sourceMime).isBlank() ? "message/rfc822" : r.sourceMime;
       af.afRelationship = Common.nz(r.afRelationship).isBlank() ? "Source" : r.afRelationship;
       af.bytes = r.sourceBytes == null ? Common.synthesizeEml(r) : r.sourceBytes;
-      af.description = Common.sourceDescription(r);
+      af.description = Common.EML_SOURCE_DESCRIPTION;
       af.ensureChecksums();
       pending.add(new ArchivePendingFile(r, af, af.filename));
     }

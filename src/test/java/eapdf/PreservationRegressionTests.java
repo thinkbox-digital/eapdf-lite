@@ -168,11 +168,9 @@ class PreservationRegressionTests {
         int pages = profile.startsWith("m") ? 4 : 2;
         for (int index = 0; index < pages; index++) document.addPage(new PDPage());
         EmailRecord first = new EmailRecord();
-        first.sourceType = "eml";
         first.sourceMime = "message/rfc822";
         if (profile.startsWith("m")) {
           EmailRecord second = new EmailRecord();
-          second.sourceType = "eml";
           PdfMailWriter.addArchiveDPartStructure(document, List.of(new PdfCollectionSupport.MessageSegment(first, 2, 3),
               new PdfCollectionSupport.MessageSegment(second, 4, 4)), 1);
         } else if (profile.startsWith("c")) {

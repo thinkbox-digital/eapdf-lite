@@ -4,11 +4,14 @@ import jakarta.mail.internet.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 class Common {
+  static final String EML_SOURCE_DESCRIPTION = "Original EML source";
+
   static synchronized Path availableArchivePath(Path requested) {
     Path candidate = requested;
     String filename = requested.getFileName().toString();
@@ -18,16 +21,15 @@ class Common {
         || Files.exists(OutputTransaction.readable(candidate), LinkOption.NOFOLLOW_LINKS)) {
       candidate = requested.resolveSibling(stem + "_" + copy++ + ".pdf");
     }
+    OutputTransaction.reserveNewDestination(candidate);
     return candidate;
   }
 
   static String digestHex(Path path, String algorithm) throws IOException {
     try {
       MessageDigest digest = MessageDigest.getInstance(algorithm);
-      try (InputStream input = Files.newInputStream(path)) {
-        byte[] buffer = new byte[8192];
-        int count;
-        while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+      try (var input = new DigestInputStream(Files.newInputStream(path), digest)) {
+        input.transferTo(OutputStream.nullOutputStream());
       }
       return HexFormat.of().formatHex(digest.digest());
     } catch (java.security.NoSuchAlgorithmException exception) {
@@ -183,6 +185,11 @@ class Common {
       diagnostics.putAll(importedDiagnostics);
     }
 
+    synchronized Path createSourceSnapshot() throws IOException {
+      if (payloads == null) payloads = new PayloadStore();
+      return Files.createTempFile(payloads.directory, "source-", ".msg");
+    }
+
     synchronized void stage(EmailRecord record) throws Exception {
       if (record.payloadStaged) return;
       ProcessingLimits.checkCount(++stagedRecords);
@@ -213,7 +220,9 @@ class Common {
       long sourceProblems = warnings.values().stream().filter(w -> w.startsWith("INCOMPLETE SOURCE:")).count();
       if (sourceProblems > 0) System.out.println("INCOMPLETE SOURCE: " + sourceProblems
           + " reported problems. Created PDFs retain available content; this is not a complete-conformance result.");
-      warnings.keySet().stream().sorted().forEach(warning -> System.out.println("warning summary: " + warning));
+      var types = new EnumMap<ConversionDiagnostic.Code, Long>(ConversionDiagnostic.Code.class);
+      diagnostics.values().forEach(diagnostic -> types.merge(diagnostic.code(), 1L, Long::sum));
+      types.forEach((type, count) -> System.out.println("warning summary: " + type + " (" + count + ")"));
       ConversionProgress.diagnostics(warnings, diagnostics);
       if (payloads != null) {
         try {
@@ -313,6 +322,36 @@ class Common {
     writeAtomically(destination, temporary -> Files.write(temporary, bytes));
   }
 
+  static Path createPrivateTemporaryDirectory(Path parent, String prefix) throws IOException {
+    Files.createDirectories(parent);
+    Path directory = Files.createTempDirectory(parent, prefix);
+    try {
+      makeOwnerOnly(directory);
+      return directory;
+    } catch (IOException | RuntimeException error) {
+      try { Files.delete(directory); } catch (IOException cleanup) { error.addSuppressed(cleanup); }
+      throw error;
+    }
+  }
+
+  static void makeOwnerOnly(Path path) throws IOException {
+    var posix = Files.getFileAttributeView(path, java.nio.file.attribute.PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+    if (posix != null) {
+      String mode = Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) ? "rwx------" : "rw-------";
+      posix.setPermissions(java.nio.file.attribute.PosixFilePermissions.fromString(mode));
+      return;
+    }
+    var acl = Files.getFileAttributeView(path, java.nio.file.attribute.AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+    if (acl == null) throw new IOException("Owner-only permissions are unavailable: " + path);
+    var access = java.nio.file.attribute.AclEntry.newBuilder()
+        .setType(java.nio.file.attribute.AclEntryType.ALLOW).setPrincipal(acl.getOwner())
+        .setPermissions(EnumSet.allOf(java.nio.file.attribute.AclEntryPermission.class));
+    if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+      access.setFlags(java.nio.file.attribute.AclEntryFlag.DIRECTORY_INHERIT, java.nio.file.attribute.AclEntryFlag.FILE_INHERIT);
+    }
+    acl.setAcl(List.of(access.build()));
+  }
+
   static void writePdfAtomically(Path destination, AtomicFileWriter writer) throws Exception {
     writePdfAtomically(destination, writer, null);
   }
@@ -322,7 +361,6 @@ class Common {
   }
 
   static void writeOuterPdfAtomically(Path destination, AtomicFileWriter writer, PreservationInventory expected) throws Exception {
-    PdfSigning.preflight();
     writePdfAtomically(destination, writer, expected, true);
   }
 
@@ -337,14 +375,6 @@ class Common {
         PdfCreationValidator.validate(temporary, expected, outermost);
       } else if (outermost) {
         System.out.println("[validation] Creation checks skipped by configuration.");
-      }
-      if (outermost && EapdfConfig.get().signing.enabled) {
-        ConversionProgress.stage("signing");
-        PdfSigning.signConfigured(temporary);
-        if (checked) {
-          ConversionProgress.stage("checking_signature_output");
-          PdfCreationValidator.validate(temporary, expected, true);
-        }
       }
       if (outermost) ConversionProgress.creationChecked(destination, temporary, expected, checked);
       ProcessingLimits.checkCancelled();
@@ -379,13 +409,16 @@ class Common {
   }
 
   static final class PerFileLogCapture implements AutoCloseable {
+    private static final int MAX_SUMMARY_KEYS = 128;
+    private static final java.util.regex.Pattern URI_IN_LOG = java.util.regex.Pattern.compile("(?i)\\b(?:https?|file|gmail|mailto):\\S+");
     final Path pdfOut;
     final Path logPath;
     final StringBuilder pendingLine = new StringBuilder();
     final Date generatedAt = new Date();
     final Map<String, Integer> warningCounts = new LinkedHashMap<>();
     final Map<String, Integer> errorCounts = new LinkedHashMap<>();
-    final Map<String, BlacklistedAssetSummary> blacklistedAssets = new LinkedHashMap<>();
+    final Set<UUID> blockedAssets = new HashSet<>();
+    long blockedAssetEncounters;
 
     PerFileLogCapture(Path pdfOut) {
       this.pdfOut = pdfOut;
@@ -413,19 +446,11 @@ class Common {
       }
     }
 
-    void recordBlacklistedRemoteAsset(String url, String reason, EmailRecord record) {
-      String assetUrl = nz(url).trim();
-      if (assetUrl.isBlank()) return;
+    void recordBlockedRemoteAsset(String url) {
       synchronized (this) {
-        String subject = summarizeValue(record == null ? null : record.subject);
-        String sourcePath = summarizeValue(record == null ? null : record.sourcePath);
-        String key = assetUrl + "\u0000" + subject + "\u0000" + sourcePath;
-        BlacklistedAssetSummary summary = blacklistedAssets.computeIfAbsent(key,
-            ignored -> new BlacklistedAssetSummary(assetUrl, subject, sourcePath));
-        summary.encounters++;
-        String trimmedReason = nz(reason).trim();
-        if (!trimmedReason.isBlank() && shouldReplaceBlacklistReason(summary.reason, trimmedReason)) {
-          summary.reason = trimmedReason;
+        blockedAssetEncounters++;
+        if (blockedAssets.size() < MAX_SUMMARY_KEYS) {
+          blockedAssets.add(UUID.nameUUIDFromBytes(url.getBytes(StandardCharsets.UTF_8)));
         }
       }
     }
@@ -444,7 +469,8 @@ class Common {
             Files.writeString(separateLog, renderSummary(), StandardCharsets.UTF_8);
           }
         }
-      } catch (IOException ignored) {
+      } catch (Exception error) {
+        System.err.println("Unable to write conversion summary: " + error.getClass().getSimpleName());
       }
     }
 
@@ -470,42 +496,29 @@ class Common {
       LogSummaryEntry entry = summarizeLogLine(value);
       if (entry == null) return;
       Map<String, Integer> target = entry.error ? errorCounts : warningCounts;
-      target.merge(entry.message, 1, Integer::sum);
+      String key = target.size() < MAX_SUMMARY_KEYS || target.containsKey(entry.message)
+          ? entry.message : "Additional messages";
+      target.merge(key, 1, Integer::sum);
     }
 
     String renderSummary() {
       int warningTotal = totalCount(warningCounts);
       int errorTotal = totalCount(errorCounts);
-      int blacklistedTotal = 0;
-      for (BlacklistedAssetSummary summary : blacklistedAssets.values()) blacklistedTotal += summary.encounters;
-
       StringBuilder out = new StringBuilder();
-      out.append("Output file: ").append(pdfOut).append(System.lineSeparator());
       out.append("Generated: ").append(generatedAt).append(System.lineSeparator()).append(System.lineSeparator());
       out.append("Warnings recorded: ").append(warningTotal).append(System.lineSeparator());
       out.append("Errors recorded: ").append(errorTotal).append(System.lineSeparator());
-      out.append("Blacklisted remote asset encounters: ").append(blacklistedTotal).append(System.lineSeparator());
-      out.append("Distinct blacklisted remote assets: ").append(blacklistedAssets.size()).append(System.lineSeparator());
+      out.append("Blocked remote asset encounters: ").append(blockedAssetEncounters).append(System.lineSeparator());
+      out.append("Distinct blocked remote assets tracked: ").append(blockedAssets.size()).append(System.lineSeparator());
 
-      if (warningTotal == 0 && errorTotal == 0 && blacklistedAssets.isEmpty()) {
+      if (warningTotal == 0 && errorTotal == 0 && blockedAssetEncounters == 0) {
         out.append(System.lineSeparator()).append("No warnings or errors recorded.").append(System.lineSeparator());
         return out.toString();
       }
 
       if (!warningCounts.isEmpty()) appendCountSection(out, "Warning Summary", warningCounts);
       if (!errorCounts.isEmpty()) appendCountSection(out, "Error Summary", errorCounts);
-      if (!blacklistedAssets.isEmpty()) appendBlacklistedAssetSection(out);
       return out.toString();
-    }
-
-    void appendBlacklistedAssetSection(StringBuilder out) {
-      out.append(System.lineSeparator()).append("Blacklisted Remote Assets").append(System.lineSeparator());
-      for (BlacklistedAssetSummary summary : blacklistedAssets.values()) {
-        out.append("- ").append(summary.url).append(" (encounters: ").append(summary.encounters).append(")").append(System.lineSeparator());
-        if (!summary.reason.isBlank()) out.append("  reason: ").append(summary.reason).append(System.lineSeparator());
-        if (!summary.subject.isBlank()) out.append("  subject: ").append(summary.subject).append(System.lineSeparator());
-        if (!summary.sourcePath.isBlank()) out.append("  source: ").append(summary.sourcePath).append(System.lineSeparator());
-      }
     }
 
     static void appendCountSection(StringBuilder out, String title, Map<String, Integer> counts) {
@@ -565,16 +578,12 @@ class Common {
     }
 
     static String summarizeValue(String value) {
-      String out = nz(value).replaceAll("\\s+", " ").trim();
+      String out = redactUris(value).replaceAll("\\s+", " ").trim();
       return out.length() > 240 ? out.substring(0, 237) + "..." : out;
     }
 
-    static boolean shouldReplaceBlacklistReason(String existing, String replacement) {
-      String current = nz(existing).trim();
-      String incoming = nz(replacement).trim();
-      if (incoming.isBlank()) return false;
-      if (current.isBlank()) return true;
-      return "previously blacklisted".equalsIgnoreCase(current) && !"previously blacklisted".equalsIgnoreCase(incoming);
+    static String redactUris(String value) {
+      return URI_IN_LOG.matcher(nz(value)).replaceAll("[URI]");
     }
   }
 
@@ -588,23 +597,9 @@ class Common {
     }
   }
 
-  static final class BlacklistedAssetSummary {
-    final String url;
-    final String subject;
-    final String sourcePath;
-    String reason = "";
-    int encounters = 0;
-
-    BlacklistedAssetSummary(String url, String subject, String sourcePath) {
-      this.url = url;
-      this.subject = subject;
-      this.sourcePath = sourcePath;
-    }
-  }
-
-  static void recordBlacklistedRemoteAsset(String url, String reason, EmailRecord record) {
+  static void recordBlockedRemoteAsset(String url) {
     PerFileLogCapture capture = ACTIVE_LOG_CAPTURE.get();
-    if (capture != null) capture.recordBlacklistedRemoteAsset(url, reason, record);
+    if (capture != null) capture.recordBlockedRemoteAsset(url);
   }
 
   static final class TeeLoggingOutputStream extends OutputStream {
@@ -637,29 +632,11 @@ class Common {
   }
 
   static String md5Hex(byte[] b) throws Exception {
-    MessageDigest md = MessageDigest.getInstance("MD5");
-    byte[] d = md.digest(b);
-    char[] hex = "0123456789abcdef".toCharArray();
-    char[] out = new char[d.length*2];
-    for (int i=0;i<d.length;i++) {
-      int v = d[i] & 0xff;
-      out[i*2] = hex[v>>>4];
-      out[i*2+1] = hex[v & 0x0f];
-    }
-    return new String(out);
+    return HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(b));
   }
 
   static String sha256Hex(byte[] b) throws Exception {
-    MessageDigest md = MessageDigest.getInstance("SHA-256");
-    byte[] d = md.digest(b);
-    char[] hex = "0123456789abcdef".toCharArray();
-    char[] out = new char[d.length*2];
-    for (int i=0;i<d.length;i++) {
-      int v = d[i] & 0xff;
-      out[i*2] = hex[v>>>4];
-      out[i*2+1] = hex[v & 0x0f];
-    }
-    return new String(out);
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(b));
   }
 
   static byte[] synthesizeEml(EmailRecord record) throws Exception {
@@ -717,28 +694,6 @@ static String portablePdfFilename(String filename) {
 
 static String sourceContentType(AssociatedFile file) {
   return nz(file.rawContentType).isBlank() ? nz(file.mime) : file.rawContentType;
-}
-
-static String sourceDerivation(EmailRecord record) {
-  if ("pst".equals(record.sourceType)) return "PST preprocessing: exported the selected message to RFC 822 from "
-      + "the PST source; the original PST container and unexported storage properties are not embedded.";
-  if ("mbox".equals(record.sourceType)) {
-    String description = "MBOX preprocessing: extracted an RFC 822 message and reversed mailbox quoting from "
-        + "the MBOX source; the original mailbox container and envelope are not embedded.";
-    return description;
-  }
-  return "";
-}
-
-static String sourceDescription(EmailRecord record) {
-  return switch (nz(record.sourceType)) {
-    case "eml" -> "Original EML source";
-    case "msg" -> "Original Outlook MSG source";
-    case "mbox" -> "Email source extracted from MBOX";
-    case "pst" -> "Email source exported from PST";
-    case "gmail" -> "Original Gmail email source";
-    default -> "Source email";
-  };
 }
 
 static String collectionFilename(String filename) {
@@ -1337,11 +1292,12 @@ static String stripInvalidXml(String s) {
     // RFC 6068 section 2: encode raw mailbox octets once. A literal percent
     // sign (including one followed by hex digits) belongs to the address.
     StringBuilder uri = new StringBuilder("mailto:");
+    HexFormat hex = HexFormat.of().withUpperCase();
     for (byte octet : e.getBytes(StandardCharsets.UTF_8)) {
       int c = octet & 255;
       if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
           || "-._~!$'()*+:@".indexOf(c) >= 0) uri.append((char) c);
-      else uri.append('%').append("0123456789ABCDEF".charAt(c >>> 4)).append("0123456789ABCDEF".charAt(c & 15));
+      else hex.toHexDigits(uri.append('%'), octet);
     }
     return uri.toString();
   }

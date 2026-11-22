@@ -33,7 +33,7 @@ final class PayloadStore implements AutoCloseable {
       source.filename = Common.nz(record.sourceFilename).isBlank() ? "message.eml" : record.sourceFilename;
       source.mime = Common.nz(record.sourceMime).isBlank() ? "message/rfc822" : record.sourceMime;
       source.afRelationship = "Source";
-      source.description = Common.sourceDescription(record);
+      source.description = Common.EML_SOURCE_DESCRIPTION;
       source.bytes = record.sourceBytes == null ? Common.synthesizeEml(record) : record.sourceBytes;
       source.ensureChecksums();
       record.associatedFiles.add(source);

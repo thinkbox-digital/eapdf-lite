@@ -26,7 +26,7 @@ and inline images can still appear in isolated files.
 ## Build
 
 Download the creator and validator JARs and their SHA-256 checksums from the
-[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.3).
+[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.4).
 The commands below build the JARs from source into temporary folders.
 
 Use Java 21 and Maven from the checkout root.
@@ -46,14 +46,14 @@ with their required document structure. PDF/UA generation, embedded search
 indexes, and PREMIS sidecars are outside the Lite Creator feature set.
 
 ```sh
-java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.3.jar \
+java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.4.jar \
   --jobs 2 --out /tmp/eapdf-lite-output /path/to/message.eml
 
-java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.3.jar \
+java -jar /tmp/eapdf-lite-creator-build/emailtopdfa-lite-2.4.0-beta.4.jar \
   --jobs 2 --out /tmp/eapdf-lite-output --archive-profile c \
   --archive-output /tmp/eapdf-lite-output/archive_1c.pdf /path/to/eml-directory
 
-java -jar /tmp/eapdf-lite-validator-build/eapdf-validator-2.4.0-beta.3.jar \
+java -jar /tmp/eapdf-lite-validator-build/eapdf-validator-2.4.0-beta.4.jar \
   /tmp/eapdf-lite-output/archive_1c.pdf /tmp/eapdf-lite-output/archive_1c.report.json
 ```
 
@@ -71,7 +71,7 @@ and embedded assets. Its limit is 32 MiB and 2,048 pages per PDF. See the
 [Even More Lite reader instructions](browser-viewer/README.md).
 
 Download the Chromium, Firefox or web package from the
-[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.3).
+[Lite release](https://github.com/thinkbox-digital/eapdf-lite/releases/tag/v2.4.0-beta.4).
 Follow the [installation instructions](browser-viewer/INSTALL.txt) for your browser.
 
 ## Release package acceptance

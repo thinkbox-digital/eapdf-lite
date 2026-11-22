@@ -3,6 +3,7 @@ package eapdf;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 final class ProcessingLimits {
   static long setting(String property, String environment, long fallback) {
@@ -57,6 +58,39 @@ final class ProcessingLimits {
     checkCancelled();
   }
 
+  static void checkRenderPages(long pages) {
+    checkCancelled();
+    int limit = com.openhtmltopdf.layout.Layer.MAX_LAYOUT_PAGES;
+    if (pages > limit) throw Common.fail("Message rendering exceeds the " + limit + "-page processing limit");
+  }
+
+  static void checkRenderedPixels(long pixels) {
+    checkCancelled();
+    long limit = Math.max(1024, Runtime.getRuntime().maxMemory() / 12);
+    if (pixels > limit) throw Common.fail("Message rendering exceeds the aggregate image limit of " + limit + " pixels");
+  }
+
+  static OutputStream boundedOutput(OutputStream output) {
+    return new java.io.FilterOutputStream(output) {
+      private long written;
+
+      @Override public void write(int value) throws IOException {
+        reserve(1);
+        out.write(value);
+      }
+
+      @Override public void write(byte[] bytes, int offset, int length) throws IOException {
+        reserve(length);
+        out.write(bytes, offset, length);
+      }
+
+      private void reserve(int length) {
+        written = Math.addExact(written, length);
+        checkOutput(written);
+      }
+    };
+  }
+
   static void checkFont(java.nio.file.Path path) throws IOException {
     long limit = setting("eapdf.maxFontBytes", "EAPDF_MAX_FONT_BYTES", Math.max(1024, Runtime.getRuntime().maxMemory() / 32));
     if (java.nio.file.Files.size(path) > limit) throw Common.fail("Font exceeds the processing limit of " + limit + " bytes: " + path);
@@ -88,7 +122,6 @@ final class ProcessingLimits {
 
   static long metadataSize(EmailRecord record) {
     long size = 2048;
-    if ("mbox".equals(record.sourceType)) size += 2048; // Entry/container provenance is attached after payload staging.
     for (String value : new String[]{record.sourcePath, record.sourceFilename, record.subject, record.from, record.to,
         record.cc, record.bcc, record.rawFrom, record.rawTo, record.rawCc, record.rawBcc, record.rawReplyTo, record.folderPath,
         record.messageId, record.rawDateHeader, record.bodyMime}) size += Common.nz(value).length() * 2L;

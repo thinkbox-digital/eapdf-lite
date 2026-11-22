@@ -154,8 +154,11 @@ final class PdfMetadataWriter {
     text(basic, "ModifyDate", now);
     text(basic, "MetadataDate", now);
     basic.setCreatorTool(tool);
-    XMPSchema pdfa = metadata.createAndAddDefaultSchema("pdfaid", "http://www.aiim.org/pdfa/ns/id/");
-    text(pdfa, "part", "4"); text(pdfa, "rev", "2020"); text(pdfa, "conformance", "F");
+    var pdfa = metadata.createAndAddPDFAIdentificationSchema();
+    pdfa.setPart(4);
+    pdfa.setRev(2020);
+    // XMPBox 3.0.8 rejects the uppercase PDF/A-4 conformance value.
+    text(pdfa, "conformance", "F");
     XMPSchema identification = metadata.createAndAddDefaultSchema("pdfmailid", "http://www.pdfa.org/eapdf/ns/id/");
     identification.addNamespace("http://www.pdfa.org/eapdf/", "pdfmail");
     text(identification, "version", "1"); text(identification, "rev", "2024"); text(identification, "conformance", profile);
@@ -178,7 +181,7 @@ final class PdfMetadataWriter {
     event.setAction("converted"); event.setSoftwareAgent(tool);
     text(event, "when", now);
     event.setParameters("Converted " + records.size() + (records.size() == 1 ? " email" : " emails") + " to PDF/mail-1" + profile + ".");
-    array(management, "History", Cardinality.Seq).addProperty(event);
+    management.addUnqualifiedSequenceValue("History", event);
     return metadata;
   }
 
@@ -216,7 +219,6 @@ String buildDescription(EmailRecord r) {
   if (!Common.nz(r.messageId).isBlank()) d.append("; messageId=").append(Common.nz(r.messageId));
   if (!Common.nz(r.mailGuid).isBlank()) d.append("; mailGuid=").append(Common.nz(r.mailGuid));
   if (!r.archiveEmails.isEmpty()) d.append("; archiveEmails=").append(String.join(", ", r.archiveEmails));
-  if (!Common.sourceDerivation(r).isBlank()) d.append("; ").append(Common.sourceDerivation(r));
   return d.toString();
 }
 
@@ -236,9 +238,6 @@ String buildArchiveDescription(List<EmailRecord> records, String archiveProfile)
   }
   if (!archiveGlobalId.isBlank()) d.append("; archiveGlobalId=").append(archiveGlobalId);
   if (!archiveEmails.isEmpty()) d.append("; archiveEmails=").append(String.join(", ", archiveEmails));
-  for (EmailRecord record : records) {
-    if (!Common.sourceDerivation(record).isBlank()) d.append("; Mail_GUID=").append(record.mailGuid).append(": ").append(Common.sourceDerivation(record));
-  }
   return d.toString();
 }
 

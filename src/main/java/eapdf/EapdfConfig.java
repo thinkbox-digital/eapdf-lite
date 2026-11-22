@@ -10,18 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 class EapdfConfig {
-  static class SigningConfig {
-    boolean enabled = false;
-    String pkcs12Path = "";
-    String alias = "";
-    String reason = "";
-  }
-
-
-
-
-
-  SigningConfig signing = new SigningConfig();
   int configVersion = 1;
   boolean validateOnCreation = true;
   String validationWarning = "";
@@ -60,7 +48,7 @@ class EapdfConfig {
   static EapdfConfig loadDefault() {
     String envPath = System.getenv("EAPDF_CONFIG");
     Path path = configurationPath();
-    if (!Files.exists(path) && (envPath == null || envPath.isBlank())) return normalize(new EapdfConfig());
+    if (!Files.exists(path) && (envPath == null || envPath.isBlank())) return new EapdfConfig();
     return load(path);
   }
 
@@ -68,8 +56,8 @@ class EapdfConfig {
     try (Reader reader = Files.newBufferedReader(path)) {
       JsonElement json = JsonParser.parseReader(reader);
       if (!json.isJsonObject()) throw new IllegalArgumentException("configuration must be a JSON object");
-      validateKeys(json.getAsJsonObject(), EapdfConfig.class, "");
-      EapdfConfig loaded = normalize(new Gson().fromJson(json, EapdfConfig.class));
+      validateKeys(json.getAsJsonObject());
+      EapdfConfig loaded = new Gson().fromJson(json, EapdfConfig.class);
       if (loaded.configVersion != 1) throw new IllegalArgumentException("unsupported configVersion: " + loaded.configVersion + " (expected 1)");
       return loaded;
     } catch (Exception e) {
@@ -77,12 +65,12 @@ class EapdfConfig {
     }
   }
 
-  static void validateKeys(JsonObject json, Class<?> type, String prefix) {
+  private static void validateKeys(JsonObject json) {
     for (var entry : json.entrySet()) {
-      String key = prefix + entry.getKey();
+      String key = entry.getKey();
       java.lang.reflect.Field field;
       try {
-        field = type.getDeclaredField(entry.getKey());
+        field = EapdfConfig.class.getDeclaredField(key);
         if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) throw new NoSuchFieldException();
       } catch (NoSuchFieldException ignored) {
         System.err.println("warning: unknown configuration setting: " + key);
@@ -96,15 +84,7 @@ class EapdfConfig {
         if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber() || !value.getAsString().matches("[0-9]+")) throw new IllegalArgumentException(key + " must be an integer");
       } else if (field.getType() == String.class) {
         if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw new IllegalArgumentException(key + " must be a string");
-      } else {
-        if (!value.isJsonObject()) throw new IllegalArgumentException(key + " must be an object");
-        validateKeys(value.getAsJsonObject(), field.getType(), key + ".");
       }
     }
-  }
-
-  static EapdfConfig normalize(EapdfConfig cfg) {
-    if (cfg.signing == null) cfg.signing = new SigningConfig();
-    return cfg;
   }
 }

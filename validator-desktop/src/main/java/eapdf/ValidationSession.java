@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.*;
 import org.verapdf.pdfa.PDFAValidator;
 
@@ -15,7 +16,7 @@ final class ValidationSession implements AutoCloseable {
     private final Path input;
     private final ValidationOutputs outputs;
     private final List<Path> protectedInputs;
-    private final String runId;
+    private final String runId, reportName;
     private final long started = System.nanoTime();
     private volatile String stage = "Starting validation", detail = "";
     private volatile boolean complete;
@@ -23,16 +24,26 @@ final class ValidationSession implements AutoCloseable {
     private byte[] reserve = new byte[512 * 1024];
     private final Thread shutdown;
 
+    ValidationSession(Path input, Path output) throws IOException {
+        this(input, output, UUID.randomUUID().toString(), false);
+    }
+    ValidationSession(Path input, Path output, boolean recoverUpstream) throws IOException {
+        this(input, output, UUID.randomUUID().toString(), recoverUpstream);
+    }
     ValidationSession(Path input, Path output, String runId, boolean recoverUpstream) throws IOException {
+        this(input, output, runId, recoverUpstream, null);
+    }
+    ValidationSession(Path input, Path output, String runId, boolean recoverUpstream, Path stagedSummary) throws IOException {
         this.input = input.toAbsolutePath();
         this.outputs = ValidationOutputs.of(output);
         this.runId = runId;
+        this.reportName = System.getProperty("eapdf.validator.publishedReport", outputs.report().toString());
         outputs.protectInput(input);
         protectedInputs = ValidationOutputs.protectedInputs(this.input);
         pdfa = new JsonObject(); pdfa.addProperty("status", "NOT_RUN");
         pdfa.addProperty("ran", false); pdfa.addProperty("compliant", false); pdfa.addProperty("profile_allowed", false);
         if (recoverUpstream) {
-            Path brief = outputs.summary();
+            Path brief = stagedSummary != null && Files.isRegularFile(stagedSummary) ? stagedSummary : outputs.summary();
             if (Files.isRegularFile(brief)) try (var reader = Files.newBufferedReader(brief)) {
                 JsonObject prior = JsonParser.parseReader(reader).getAsJsonObject();
                 JsonObject summary = prior.getAsJsonObject("summary");
@@ -100,7 +111,7 @@ final class ValidationSession implements AutoCloseable {
         value.addProperty("elapsed_seconds", (System.nanoTime() - started) / 1_000_000_000);
         value.addProperty("updated", Instant.now().toString());
         value.addProperty("validation_target", "eapdf");
-        value.addProperty("report", outputs.report().toString());
+        value.addProperty("report", reportName);
         value.addProperty("run_id", runId);
         try { write(outputs.progress(), value); }
         catch (IOException error) { System.err.println("Unable to write validation progress: " + error.getMessage()); }
@@ -137,7 +148,7 @@ final class ValidationSession implements AutoCloseable {
         }
         result.add("summary", summary); result.add("pdfa", pdfa); result.add("items", items);
         JsonObject brief = new JsonObject(); brief.add("summary", summary); brief.add("pdfa", pdfa);
-        brief.addProperty("report", outputs.report().toString());
+        brief.addProperty("report", reportName);
         if (iso32005 != null) brief.add("iso32005", iso32005);
         java.util.List<String> failures = new java.util.ArrayList<>();
         if ("FAIL".equals(upstream)) failures.add("PDFA_FIRST_PASS");
@@ -153,6 +164,8 @@ final class ValidationSession implements AutoCloseable {
         catch (Exception error) { System.err.println("Unable to write incomplete validation report: " + error); }
         stage = "Incomplete"; detail = reason; updateProgress(); complete = true;
     }
+    String reportName() { return reportName; }
+
     JsonObject completedSummary(JsonObject summary) {
         summary.addProperty("run_id", runId);
         summary.addProperty("run_state", "COMPLETE");
@@ -165,7 +178,7 @@ final class ValidationSession implements AutoCloseable {
     }
 
     void write(Path output, JsonObject result) throws IOException {
-        if (!output.equals(outputs.report())) outputs.verifyPreviousSidecars();
+        if (!output.equals(outputs.report()) && reportName.equals(outputs.report().toString())) outputs.verifyPreviousSidecars();
         writeAtomic(output, result, protectedInputs);
     }
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from collections import Counter
 import argparse,csv,hashlib,json,os,subprocess,tempfile,time,zipfile
+from published_outputs import walk_output_files
 ROOT=Path(__file__).resolve().parents[1]
 
 def digest(path):
@@ -88,7 +89,7 @@ def main():
     parser.add_argument('--timeout',type=int,default=1800)
     args=parser.parse_args();args.input=args.input.resolve();args.reports=args.reports.resolve()
     if min(args.jobs,args.heap_mb,args.timeout)<1:parser.error('Resource settings must be positive')
-    pin=json.loads((ROOT/'config/arlington.json').read_text());jar=ROOT/'dist/tools'/('arlington-'+pin['version'])/'bin'/('cli-arlington-'+pin['version']+'.jar')
+    pin=json.loads((ROOT/'config/arlington.json').read_text());jar=ROOT/'.local/tools'/('arlington-'+pin['version'])/'bin'/('cli-arlington-'+pin['version']+'.jar')
     if not jar.exists():parser.error('Install the checker first: python3 scripts/install_arlington.py')
     if digest(jar)!=pin['jar_sha256']:parser.error('Arlington JAR checksum mismatch')
     with zipfile.ZipFile(jar) as archive:
@@ -99,7 +100,7 @@ def main():
     from arlington_semantics import verify as verify_semantics
     try:pin['model_adapter']['installed']=verify_semantics(jar.parent.parent/'model-corrections',pin['model_adapter'])
     except (OSError,ValueError,RuntimeError) as error:parser.error('Install/verify the model adapter first: '+str(error))
-    files=[args.input] if args.input.is_file() else sorted(p for p in args.input.rglob('*') if p.is_file() and p.suffix.lower()=='.pdf')
+    files=[args.input] if args.input.is_file() else sorted(p for p in walk_output_files(args.input) if p.is_file() and p.suffix.lower()=='.pdf')
     if not files:parser.error('No PDF inputs found')
     args.reports.mkdir(parents=True,exist_ok=True)
     inventory=[{'file':str(p),'bytes':p.stat().st_size,'sha256':digest(p)} for p in files];save(args.reports/'input-files.json',inventory)

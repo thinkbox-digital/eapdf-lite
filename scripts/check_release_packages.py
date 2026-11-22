@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
@@ -19,6 +20,7 @@ from email.policy import SMTP
 import pikepdf
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 PROFILES = ('1s', '1si', '1m', '1mi', '1c', '1ci')
 SUBJECTS = ('Release acceptance alpha', 'Release acceptance beta')
 ATTACHMENT = 'release-attachment.txt'
@@ -151,6 +153,33 @@ def validate(jar, pdf, directory, expected='PASS'):
     return result
 
 
+def check_validator_parity(pdf, java_result, directory, collection=False):
+    # Python runs its EA-PDF rules here. Collection verdicts also require child PDF/A runs.
+    from validate_eapdf import validate as validate_python
+    result = validate_python(str(pdf))
+    summary = result.summary()
+    evidence = directory / f'{pdf.stem}.python-validation.json'
+    evidence.write_text(json.dumps({'summary': summary, 'items': result.items}, ensure_ascii=False) + '\n')
+    java_status = java_result['summary']['status']
+    if collection and summary['status'] == 'INCOMPLETE':
+        require(any(item['code'] == 'COLLECTION_CHILD_VALIDATION' and item['level'] == 'WARN'
+                    and (item.get('details') or {}).get('pdfa_status') == 'SKIP' for item in result.items),
+                f'{pdf.name}: Python’s incomplete collection result lacks a skipped child PDF/A assessment. See {evidence}')
+    else:
+        require(summary['status'] == java_status,
+                f'{pdf.name}: Java and Python EA-PDF status differ. See {evidence}')
+    codes = {'EAPDF_CONFORMANCE_VALUE', 'AF_IN_NAME_TREE'}
+    if collection:
+        codes.add('COLLECTION_CONTENT_TYPES')
+    rank = ('N/A', 'PASS', 'WARN', 'FAIL')
+    def strongest(items, code):
+        return max((item['level'] for item in items if item['code'] == code), key=rank.index, default=None)
+    for code in sorted(codes):
+        python_level = strongest(result.items, code)
+        require(python_level is not None and python_level == strongest(java_result['items'], code),
+                f'{pdf.name}: Java and Python disagree on {code}. See {evidence}')
+
+
 def check_child_reports(report, expected_hashes, pdf):
     results = [details for row in report['items']
                if row['code'] == 'COLLECTION_CHILD_VALIDATION'
@@ -193,6 +222,7 @@ def check_bad_collections(jar, seed, directory):
                     spec.CI.Size = len(data)
             parent.save(output)
         result = validate(jar, output, directory, 'FAIL')
+        check_validator_parity(output, result, directory, collection=True)
         require(result['pdfa']['status'] == 'PASS', f'{output.name}: mutation broke outer PDF/A')
         require(any(item['level'] == 'FAIL' and item['code'] == 'COLLECTION_CHILD_VALIDATION'
                     for item in result['items']), f'{output.name}: no child validation failure')
@@ -339,6 +369,7 @@ def main():
         pdf = pdfs[0]
         child_hashes = check_profile(pdf, profile, [path.read_bytes() for path in selected])
         report = validate(validator, pdf, directory)
+        check_validator_parity(pdf, report, directory, collection=profile in ('1c', '1ci'))
         check_child_reports(report, child_hashes, pdf)
         documents[profile] = {'path': str(pdf), 'sha256': sha256(pdf)}
     for profile in ('1c', '1ci'):

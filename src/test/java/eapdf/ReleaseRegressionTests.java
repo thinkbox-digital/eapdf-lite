@@ -79,7 +79,7 @@ class ReleaseRegressionTests {
   }
 
   @Test
-  void allProfilesKeepEaPdfStructureAndOmitPdfUaIdentification() throws Exception {
+  void allProfilesKeepEaPdfStructureWithoutPdfUaSearchIndexesOrSignatures() throws Exception {
     EmailRecord first = EmlReader.readRfc822Bytes(("Date: Fri, 16 Oct 2026 12:00:00 +0000\r\nSubject: First\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"
         + "<h1>Real heading</h1><p>Real paragraph <a href='https://example.org'>link</a></p>"
         + "<table><tr><th>Column</th></tr><tr><td>Cell</td></tr></table>").getBytes(StandardCharsets.UTF_8), "first.eml", "first.eml", "", List.of(), false);
@@ -92,7 +92,10 @@ class ReleaseRegressionTests {
       } else if (profile.startsWith("m")) PdfMailWriter.writeEaPdfArchive(output, List.of(first, second), TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, profile);
       else PdfMailWriter.writeEaPdfCollection(output, List.of(first, second), TestSupport.fontPath(), TestSupport.iccPath(), false, tempDir, profile);
       try (PDDocument document = Loader.loadPDF(output.toFile())) {
-        Assertions.assertFalse(TestSupport.metadataXml(document).contains("pdfuaid:"));
+        String xmp = TestSupport.metadataXml(document);
+        Assertions.assertFalse(xmp.contains("http://www.aiim.org/pdfua/ns/id/"), profile);
+        Assertions.assertFalse(xmp.contains("https://thinkbox.digital/eapdf/search-index/"), profile);
+        Assertions.assertTrue(document.getSignatureDictionaries().isEmpty(), profile);
         var tree = (COSDictionary)document.getDocumentCatalog().getCOSObject().getDictionaryObject(COSName.STRUCT_TREE_ROOT);
         List<String> roles = new ArrayList<>();
         collectRoles(tree.getDictionaryObject(COSName.K), roles);

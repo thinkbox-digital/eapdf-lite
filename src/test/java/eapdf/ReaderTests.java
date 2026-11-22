@@ -16,7 +16,6 @@ class ReaderTests {
         List.of(),
         false);
 
-    Assertions.assertEquals("eml", record.sourceType);
     Assertions.assertNotNull(record.subject);
     Assertions.assertFalse(record.subject.isBlank());
     Assertions.assertNotNull(record.from);
@@ -32,7 +31,8 @@ class ReaderTests {
             .anyMatch(
                 af ->
                     "Source".equals(af.afRelationship)
-                        && emlPath.getFileName().toString().equals(af.filename)));
+                        && emlPath.getFileName().toString().equals(af.filename)
+                        && "Original EML source".equals(af.description)));
   }
 
 }

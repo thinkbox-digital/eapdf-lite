@@ -118,11 +118,13 @@ def main():
     args.output = args.output.resolve()
     # A fresh evidence directory prevents stale PDFs/reports from satisfying the gate.
     args.output.mkdir(parents=True, exist_ok=False)
-    results = {'status': 'RUNNING', 'scope': 'Public small EML, MSG and MBOX fidelity, visual checks and standalone Java validation', 'cases': []}
+    results = {'status': 'RUNNING', 'scope': 'Public EML fidelity, visual checks and standalone Java validation', 'cases': []}
     try:
         corpus = json.loads((ROOT / 'regression/quality/corpus.json').read_text())
         require(fitz.__version__ == corpus['renderer_version'], 'Wrong rasterizer version; install regression/quality/requirements.txt')
         for case in corpus['cases']:
+            if Path(case['input']).suffix.lower() != '.eml':
+                continue
             original = check_original(case)
             name = Path(case['input']).stem
             destination = args.output / name

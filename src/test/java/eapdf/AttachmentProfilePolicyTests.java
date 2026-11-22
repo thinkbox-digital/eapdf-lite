@@ -21,7 +21,6 @@ class AttachmentProfilePolicyTests {
 
   static EmailRecord record(String subject) throws Exception {
     EmailRecord record = new EmailRecord();
-    record.sourceType = "pst";
     record.subject = subject;
     record.textBody = "Email body";
     record.htmlBody = "<p>Email body</p>";
@@ -31,7 +30,7 @@ class AttachmentProfilePolicyTests {
     attachment.filename = "native.txt";
     attachment.mime = "text/plain";
     attachment.afRelationship = "Data";
-    attachment.description = "Original PST attachment";
+    attachment.description = "Original EML attachment";
     attachment.emailAttachment = true;
     attachment.bytes = PAYLOAD;
     record.associatedFiles.add(attachment);
