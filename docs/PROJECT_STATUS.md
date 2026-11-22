@@ -1,5 +1,11 @@
 # Project status
 
+**Release verification.** The [package acceptance check](../README.md#release-package-acceptance)
+exercises the creator, standalone validator, and packaged readers on the same
+six generated profiles. It also checks explicit collection metadata against
+validated children. GitHub publication through the acceptance workflow uses the
+packages and checksums from the successful job.
+
 This Lite checkout ships an EML command-line creator, a Java command-line
 validator and the Even More Lite reader. See the [Lite quick start](../README.md)
 for commands. Lite publishes creator and validator **2.4.0-beta.1** with
