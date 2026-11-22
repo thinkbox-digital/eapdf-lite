@@ -68,7 +68,7 @@ Portal and fall back to the JavaFX file picker if the portal is unavailable.
 Omit the PDF path to start with the file chooser button.
 
 ```sh
-java -jar dist/eapdf-desktop-viewer-full-0.8.0.jar /path/to/archive.pdf
+java -jar dist/eapdf-desktop-viewer-lite-0.9.0.jar /path/to/archive.pdf
 ```
 
 For Lite or Secure, replace `full` in the filename with `lite` or `secure`.
@@ -92,7 +92,9 @@ desktop-viewer/package.sh
 ```
 
 The command writes one versioned viewer JAR to `dist/`. Set
-`EAPDF_VIEWER_DIST` to choose another directory. GitHub Actions builds the JAR
+`EAPDF_VIEWER_DIST` to choose another directory. A later build prunes the
+previous JAR when the saved checksum still matches. Files outside that
+inventory, including older packages and edited copies, are preserved. GitHub Actions builds the JAR
 as part of [release package acceptance](../README.md#release-package-acceptance).
 
 The viewer uses PDFViewFX 3.6.1 and PDFBox 3.0.8. Maven resolves both dependencies.

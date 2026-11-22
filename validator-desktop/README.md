@@ -76,12 +76,22 @@ java -jar /path/to/eapdf-validator-2.4.0-beta.1.jar input.pdf validation-report.
 The JAR includes its runtime libraries and validation rules. It also runs in a
 headless Java 21 environment.
 
-The exit code is `0` for **PASS**, `2` for **FAIL** or **INCOMPLETE**, and `1` if
-the command receives the wrong number of arguments. Read the report's summary
+The exit code is `0` for **PASS**, `2` for **FAIL** or **INCOMPLETE**, and `1` for an invocation or
+preflight failure. Read the report's summary
 to distinguish a failed check from an incomplete run.
 
 The validator reads the input PDF and streams the complete report to the
 specified JSON file. It also writes `.progress.json` and `.summary.json` sidecars.
+
+The CLI checks all three destinations before writing and rejects aliases of
+the input or unrecognized existing sidecars. Concurrent validations may use
+different report names in the same directory. Keep the directory's empty
+`.eapdf-validation.lock` file in place so workers can reserve overlapping paths
+across processes. The report and sidecars share a `run_id`. A missing or
+unreadable input produces a new **INCOMPLETE** report and exit `1` when the
+destinations are writable and safe. Automation should use the process exit and
+match the run identifier when reading more than one result file.
+
 Private scratch prefers disk storage when the system temp folder uses RAM.
 Collection members are checked recursively with cycle detection and byte
 accounting.

@@ -2,3 +2,4 @@ node_modules/
 dist/
 releases/
 test-results/
+.viewer-stage-*/
