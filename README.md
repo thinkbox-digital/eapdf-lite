@@ -1,6 +1,6 @@
 # EA-PDF Lite
 
-Convert local EML files into EA-PDF using the Java command-line creator, check
+Convert local EML files into [EA-PDF](https://pdfa.org/download-area/specifications/EA-PDF-v1.pdf) using the Java command-line creator, check
 the resulting PDFs with the Java command-line validator, and open them in the
 Even More Lite browser reader. The creator accepts an EML file or a directory
 of EML files.
