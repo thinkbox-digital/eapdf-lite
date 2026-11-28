@@ -145,7 +145,7 @@ jobs:
             --creator-dependencies "$inventory/creator-dependencies.txt" --creator-jar "${creator[0]}" \
             --validator-dependencies "$inventory/validator-dependencies.txt" --validator-jar "${validator[0]}" \
             --desktop-dependencies "$inventory/desktop-dependencies.txt" --desktop-jar "${desktop[0]}" "${browser[@]}"
-      - uses: anchore/scan-action/download-grype@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+      - uses: anchore/scan-action/download-grype@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         id: grype
       - name: Gate high and critical runtime advisories
         env:
